@@ -8,9 +8,10 @@ import MemberRequestsScreen from "../app/member-requests";
 import MemberProfileScreen from "../app/member-profile";
 import HomeScreen from "../app/home";
 import ClubScreen from "../app/club";
-import MembersScreen from "../app/members";
-import HubScreen from "../app/hub";
-import DuesScreen from "../app/dues";
+import TabsLayout from "../app/(tabs)/_layout";
+import MembersScreen from "../app/(tabs)/members";
+import EconomyScreen from "../app/(tabs)/economy";
+import SetupScreen from "../app/(tabs)/setup";
 
 jest.mock("expo-contacts", () => ({
   requestPermissionsAsync: jest.fn(async () => ({ status: "granted" })),
@@ -107,9 +108,10 @@ const APP_DIR = {
   "member-profile": MemberProfileScreen,
   home: HomeScreen,
   club: ClubScreen,
-  members: MembersScreen,
-  hub: HubScreen,
-  dues: DuesScreen,
+  "(tabs)/_layout": TabsLayout,
+  "(tabs)/members": MembersScreen,
+  "(tabs)/economy": EconomyScreen,
+  "(tabs)/setup": SetupScreen,
 };
 
 const sessionFor = (role: "owner" | "member") => ({
@@ -211,21 +213,18 @@ describe("Dues & ledger role matrix", () => {
     (supabase.rpc as jest.Mock).mockResolvedValue({ data: 0, error: null });
   });
 
-  it("lets an owner open the dues desk and create a plan", async () => {
+  it("lets an owner create a dues plan from the Economy tab", async () => {
     renderForRole("owner");
 
-    // Land on home, open the club -> membership desk.
-    fireEvent.press(await screen.findByText("Sunrise Runners"));
-    expect(await screen.findByText("3. Membership desk")).toBeTruthy();
+    // Owner auto-enters the active club and lands on the Members tab.
+    expect(await screen.findByText("Member directory")).toBeTruthy();
 
-    // Owner sees the dues management entry point.
-    const duesButton = await screen.findByText("Manage dues & ledger");
-    fireEvent.press(duesButton);
+    // Move to the Economy tab and open the Plans sub-tab.
+    fireEvent.press(screen.getByText("Economy"));
+    fireEvent.press(await screen.findByLabelText("Plans tab"));
 
-    // Dues screen shows all three management cards.
     expect(await screen.findByText("Dues plans")).toBeTruthy();
     expect(screen.getByText("Billing cycles")).toBeTruthy();
-    expect(screen.getByText("Manual ledger")).toBeTruthy();
 
     // Fill and submit the dues plan form.
     fireEvent.changeText(
@@ -253,10 +252,12 @@ describe("Dues & ledger role matrix", () => {
   it("records a manual ledger expense for an owner", async () => {
     renderForRole("owner");
 
-    fireEvent.press(await screen.findByText("Sunrise Runners"));
-    fireEvent.press(await screen.findByText("Manage dues & ledger"));
+    expect(await screen.findByText("Member directory")).toBeTruthy();
 
-    expect(await screen.findByText("Manual ledger")).toBeTruthy();
+    fireEvent.press(screen.getByText("Economy"));
+    fireEvent.press(await screen.findByLabelText("Ledger tab"));
+
+    expect(await screen.findByText("Recent transactions")).toBeTruthy();
 
     fireEvent.press(screen.getByLabelText("Transaction type expense"));
     fireEvent.changeText(screen.getByLabelText("Transaction amount"), "350");
@@ -282,11 +283,18 @@ describe("Dues & ledger role matrix", () => {
   it("hides dues management and invite controls from a plain member", async () => {
     renderForRole("member");
 
-    fireEvent.press(await screen.findByText("Sunrise Runners"));
-    expect(await screen.findByText("3. Membership desk")).toBeTruthy();
+    expect(await screen.findByText("Member directory")).toBeTruthy();
 
-    // Member cannot manage dues or send invites.
-    expect(screen.queryByText("Manage dues & ledger")).toBeNull();
+    // Member cannot send invites on the Members tab.
     expect(screen.queryByText("Send onboarding invite")).toBeNull();
+
+    // Member cannot manage dues plans on the Economy tab.
+    fireEvent.press(screen.getByText("Economy"));
+    fireEvent.press(await screen.findByLabelText("Plans tab"));
+    expect(
+      await screen.findByText(
+        "Only an owner or treasurer can manage dues plans and cycles.",
+      ),
+    ).toBeTruthy();
   });
 });

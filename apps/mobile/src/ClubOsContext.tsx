@@ -8,6 +8,7 @@ import {
 } from "react";
 import { useRouter } from "expo-router";
 import * as Contacts from "expo-contacts";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import type {
@@ -27,6 +28,8 @@ import type {
 } from "./types";
 import { canManageFinances, deriveDuesSummary } from "./dues";
 
+const ACTIVE_CLUB_KEY = "clubos.activeClub";
+
 const screenToPath: Record<Screen, string> = {
   otp: "/",
   profileSetup: "/profile-setup",
@@ -35,8 +38,8 @@ const screenToPath: Record<Screen, string> = {
   club: "/club",
   memberProfile: "/member-profile",
   members: "/members",
-  hub: "/hub",
-  dues: "/dues",
+  economy: "/economy",
+  setup: "/setup",
 };
 
 type ClubOsContextValue = {
@@ -71,6 +74,7 @@ type ClubOsContextValue = {
   contactsVisible: boolean;
   setContactsVisible: (value: boolean) => void;
   contactsLoading: boolean;
+  contactsPermission: "unknown" | "granted" | "denied";
   pendingClubName: string;
   onboardName: string;
   setOnboardName: (value: string) => void;
@@ -85,6 +89,7 @@ type ClubOsContextValue = {
   infoText: string;
   session: Session | null;
   clubId: string;
+  activeClubName: string;
   paidCount: number;
   unpaidCount: number;
   collectionPercent: number;
@@ -100,8 +105,11 @@ type ClubOsContextValue = {
   inviteMember: () => Promise<void>;
   loadContacts: () => Promise<void>;
   selectContact: (contact: ContactOption) => void;
+  requestContactsForInvite: () => Promise<"granted" | "denied">;
+  inviteContacts: (contacts: ContactOption[]) => Promise<number>;
   goHome: () => Promise<void>;
   openClub: (clubId: string, name: string) => Promise<void>;
+  switchClub: (clubId: string, name: string) => Promise<void>;
   refreshDues: () => Promise<void>;
   createDuesPlan: (input: {
     name: string;
@@ -163,6 +171,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const [contactOptions, setContactOptions] = useState<ContactOption[]>([]);
   const [contactsVisible, setContactsVisible] = useState(false);
   const [contactsLoading, setContactsLoading] = useState(false);
+  const [contactsPermission, setContactsPermission] = useState<
+    "unknown" | "granted" | "denied"
+  >("unknown");
   const [currentMemberId, setCurrentMemberId] = useState("");
   const [pendingMemberId, setPendingMemberId] = useState("");
   const [pendingClubId, setPendingClubId] = useState("");
@@ -185,6 +196,46 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     router.replace(screenToPath[screen] as never);
   };
 
+  // Persist the active club locally so the user lands back in the same club
+  // context after an app restart.
+  const persistActiveClub = async (targetClubId: string, name: string) => {
+    try {
+      await AsyncStorage.setItem(
+        ACTIVE_CLUB_KEY,
+        JSON.stringify({ clubId: targetClubId, name }),
+      );
+    } catch {
+      // Non-fatal: a failed write just means we fall back to the first club.
+    }
+  };
+
+  const readPersistedActiveClub = async (): Promise<{
+    clubId: string;
+    name: string;
+  } | null> => {
+    try {
+      const raw = await AsyncStorage.getItem(ACTIVE_CLUB_KEY);
+      if (!raw) {
+        return null;
+      }
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed.clubId === "string") {
+        return { clubId: parsed.clubId, name: parsed.name ?? "" };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const clearPersistedActiveClub = async () => {
+    try {
+      await AsyncStorage.removeItem(ACTIVE_CLUB_KEY);
+    } catch {
+      // Non-fatal.
+    }
+  };
+
   const resetOnboardingState = () => {
     setOtpSent(false);
     setOtp("");
@@ -205,6 +256,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setInviteEmail("");
     setContactOptions([]);
     setContactsVisible(false);
+    setContactsPermission("unknown");
     setCurrentMemberId("");
     setPendingMemberId("");
     setPendingClubId("");
@@ -338,6 +390,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setInfoText("");
     setClubId(targetClubId);
     setActiveClubName(name);
+    void persistActiveClub(targetClubId, name);
     setLoading(true);
     await Promise.all([
       loadMembers(targetClubId),
@@ -349,6 +402,29 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     ]);
     setLoading(false);
     navigate("members");
+  };
+
+  // Swaps the active club context without leaving the current tab. Used by the
+  // header club switcher so the user stays on whichever domain tab they are on.
+  const switchClub = async (targetClubId: string, name: string) => {
+    if (targetClubId === clubId) {
+      return;
+    }
+    setErrorText("");
+    setInfoText("");
+    setClubId(targetClubId);
+    setActiveClubName(name);
+    void persistActiveClub(targetClubId, name);
+    setLoading(true);
+    await Promise.all([
+      loadMembers(targetClubId),
+      loadInvites(targetClubId),
+      loadDues(targetClubId),
+      loadDuesPlans(targetClubId),
+      loadDuesCycles(targetClubId),
+      loadLedger(targetClubId),
+    ]);
+    setLoading(false);
   };
 
   const refreshDues = async () => {
@@ -431,7 +507,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
 
     const { data, error } = await supabase
       .from("members")
-      .select("id,name,role,user_id,membership_status")
+      .select("id,name,role,user_id,membership_status,phone")
       .eq("club_id", activeClubId)
       .order("created_at", { ascending: true });
 
@@ -467,6 +543,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
                 : "Member",
         duesPaid: false,
         status: member.membership_status,
+        phone: member.phone ?? undefined,
       })),
     );
   };
@@ -832,18 +909,26 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
         .select("id,club_id,membership_status")
         .eq("user_id", user.id)
         .eq("membership_status", "active")
-        .order("created_at", { ascending: true })
-        .limit(1);
+        .order("created_at", { ascending: true });
 
     if (!activeMembershipsError && activeMemberships && activeMemberships[0]) {
-      const activeClubId = activeMemberships[0].club_id;
+      const persisted = await readPersistedActiveClub();
+      const persistedMatch = persisted
+        ? activeMemberships.find(
+            (membership) => membership.club_id === persisted.clubId,
+          )
+        : undefined;
+      const activeClubId = persistedMatch
+        ? persistedMatch.club_id
+        : activeMemberships[0].club_id;
       setClubId(activeClubId);
       const { data: activeClub } = await supabase
         .from("clubs")
         .select("name")
         .eq("id", activeClubId)
         .maybeSingle();
-      setActiveClubName(activeClub?.name ?? "");
+      const activeName = activeClub?.name ?? persisted?.name ?? "";
+      setActiveClubName(activeName);
 
       if (!hasBasicProfile) {
         setOnboardName(metadataName);
@@ -856,7 +941,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       }
 
       await loadHomeData();
-      navigate("home");
+      await openClub(activeClubId, activeName);
       return;
     }
 
@@ -1343,6 +1428,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
 
     setSession(null);
     resetOnboardingState();
+    void clearPersistedActiveClub();
     setInfoText("Logged out successfully.");
   };
 
@@ -1500,6 +1586,152 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setInfoText(`Selected ${selectedContact.name}. You can now send invite.`);
   };
 
+  const requestContactsForInvite = async (): Promise<"granted" | "denied"> => {
+    setErrorText("");
+    setContactsLoading(true);
+
+    const permission = await Contacts.requestPermissionsAsync();
+    if (permission.status !== "granted") {
+      setContactsPermission("denied");
+      setContactsLoading(false);
+      return "denied";
+    }
+
+    const contactsResult = await Contacts.getContactsAsync({
+      fields: [Contacts.Fields.PhoneNumbers],
+      pageSize: 200,
+    });
+
+    const seen = new Set<string>();
+    const mappedContacts: ContactOption[] = (contactsResult.data || [])
+      .map((contact: Contacts.Contact, index: number) => {
+        const phoneValue = contact.phoneNumbers?.[0]?.number ?? "";
+        return {
+          id: contact.id ?? `contact_${index}`,
+          name: contact.name || "Unnamed contact",
+          phone: normalizePhone(phoneValue),
+        };
+      })
+      .filter((contact) => {
+        if (contact.phone.length < 10 || seen.has(contact.phone)) {
+          return false;
+        }
+        seen.add(contact.phone);
+        return true;
+      })
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    setContactOptions(mappedContacts);
+    setContactsPermission("granted");
+    setContactsLoading(false);
+    return "granted";
+  };
+
+  const inviteContacts = async (
+    selectedContacts: ContactOption[],
+  ): Promise<number> => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Create a club first.");
+      return 0;
+    }
+    if (!currentMemberId) {
+      setErrorText("Unable to resolve your membership role. Please re-login.");
+      return 0;
+    }
+    if (selectedContacts.length === 0) {
+      return 0;
+    }
+
+    setLoading(true);
+
+    const expiresAt = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+
+    let invitedCount = 0;
+    const seenPhones = new Set<string>();
+
+    for (const contact of selectedContacts) {
+      const normalizedPhone = normalizePhone(contact.phone);
+      if (normalizedPhone.length < 10 || seenPhones.has(normalizedPhone)) {
+        continue;
+      }
+      seenPhones.add(normalizedPhone);
+
+      const { data: existingMember } = await supabase
+        .from("members")
+        .select("id")
+        .eq("club_id", clubId)
+        .eq("phone", normalizedPhone)
+        .in("membership_status", ["invited", "active", "suspended"])
+        .limit(1);
+
+      if (existingMember && existingMember.length > 0) {
+        continue;
+      }
+
+      const token = `invite_${Date.now()}_${Math.random()
+        .toString(36)
+        .slice(2, 10)}`;
+
+      const { data: invitedMemberRow, error: invitedMemberCreateError } =
+        await supabase
+          .from("members")
+          .insert({
+            club_id: clubId,
+            user_id: null,
+            name: contact.name.trim() || "Invited member",
+            email: null,
+            phone: normalizedPhone,
+            role: "member",
+            membership_status: "invited",
+            is_active: true,
+          })
+          .select("id")
+          .single();
+
+      if (invitedMemberCreateError || !invitedMemberRow) {
+        continue;
+      }
+
+      const { error: inviteError } = await supabase
+        .from("club_invites")
+        .insert({
+          club_id: clubId,
+          invited_phone: normalizedPhone,
+          invited_email: null,
+          token,
+          invited_by: currentMemberId,
+          expires_at: expiresAt,
+        });
+
+      if (inviteError) {
+        await supabase.from("members").delete().eq("id", invitedMemberRow.id);
+        continue;
+      }
+
+      invitedCount += 1;
+    }
+
+    await Promise.all([loadInvites(clubId), loadMembers(clubId)]);
+    setLoading(false);
+
+    if (invitedCount > 0) {
+      setInfoText(
+        invitedCount === 1
+          ? "Invite sent. They'll appear as invited until they join."
+          : `${invitedCount} invites sent. They'll appear as invited until they join.`,
+      );
+    } else {
+      setInfoText("No new invites sent — those contacts are already in the club.");
+    }
+
+    return invitedCount;
+  };
+
   const resumeOnboarding = (request: MembershipRequest) => {
     if (!request.memberId) {
       setErrorText(
@@ -1551,6 +1783,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     contactsVisible,
     setContactsVisible,
     contactsLoading,
+    contactsPermission,
     pendingClubName,
     onboardName,
     setOnboardName,
@@ -1565,6 +1798,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     infoText,
     session,
     clubId,
+    activeClubName,
     paidCount,
     unpaidCount,
     collectionPercent,
@@ -1580,8 +1814,11 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     inviteMember,
     loadContacts,
     selectContact,
+    requestContactsForInvite,
+    inviteContacts,
     goHome,
     openClub,
+    switchClub,
     refreshDues,
     createDuesPlan,
     createDuesCycle,

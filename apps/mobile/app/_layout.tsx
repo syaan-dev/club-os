@@ -9,7 +9,7 @@ export default function RootLayout() {
         <Stack
           screenOptions={{
             headerShown: false,
-            contentStyle: { backgroundColor: "#f6f8fb" },
+            contentStyle: { backgroundColor: "#0f1113" },
           }}
         />
       </ClubOsProvider>

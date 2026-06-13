@@ -4,32 +4,25 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { styles } from "../styles";
 import { useClubOs } from "../ClubOsContext";
-import { AppButton } from "./AppButton";
+import { ClubHeader } from "./ClubHeader";
 
-export function ScreenShell({
+export function TabScreenShell({
   children,
   showLoading = false,
 }: {
   children: ReactNode;
   showLoading?: boolean;
 }) {
-  const { session, loading, errorText, infoText, logout } = useClubOs();
+  const { loading, errorText, infoText } = useClubOs();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
+      <StatusBar style="light" />
+      <ClubHeader />
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <StatusBar style="light" />
-        <Text style={styles.stepText}>Club operations onboarding</Text>
-        <Text style={styles.title}>Club OS onboarding</Text>
-        <Text style={styles.subtitle}>
-          Manage membership, communication, and dues in one workflow.
-        </Text>
-        {session ? (
-          <AppButton label="Logout" onPress={logout} disabled={loading} />
-        ) : null}
         {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
         {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
         {children}

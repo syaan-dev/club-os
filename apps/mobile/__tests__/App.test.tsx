@@ -8,8 +8,10 @@ import MemberRequestsScreen from "../app/member-requests";
 import MemberProfileScreen from "../app/member-profile";
 import HomeScreen from "../app/home";
 import ClubScreen from "../app/club";
-import MembersScreen from "../app/members";
-import HubScreen from "../app/hub";
+import TabsLayout from "../app/(tabs)/_layout";
+import MembersScreen from "../app/(tabs)/members";
+import EconomyScreen from "../app/(tabs)/economy";
+import SetupScreen from "../app/(tabs)/setup";
 
 jest.mock("expo-contacts", () => ({
   requestPermissionsAsync: jest.fn(async () => ({ status: "granted" })),
@@ -117,8 +119,10 @@ const APP_DIR = {
   "member-profile": MemberProfileScreen,
   home: HomeScreen,
   club: ClubScreen,
-  members: MembersScreen,
-  hub: HubScreen,
+  "(tabs)/_layout": TabsLayout,
+  "(tabs)/members": MembersScreen,
+  "(tabs)/economy": EconomyScreen,
+  "(tabs)/setup": SetupScreen,
 };
 
 describe("App onboarding flows", () => {

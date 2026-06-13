@@ -6,8 +6,8 @@ export type Screen =
   | "club"
   | "memberProfile"
   | "members"
-  | "hub"
-  | "dues";
+  | "economy"
+  | "setup";
 
 export type Member = {
   id: string;
@@ -15,6 +15,7 @@ export type Member = {
   role: "Owner" | "Treasurer" | "Secretary" | "Member";
   duesPaid: boolean;
   status: "invited" | "active" | "suspended" | "left";
+  phone?: string;
 };
 
 export type Invite = {
