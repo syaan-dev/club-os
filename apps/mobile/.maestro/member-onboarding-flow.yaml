@@ -1,0 +1,30 @@
+appId: host.exp.Exponent
+---
+# Requires Expo Go with the app opened in a simulator/device.
+# This flow validates member registration and membership request handling.
+
+- launchApp
+
+# OTP login
+- tapOn: "Phone number"
+- inputText: "+919876543210"
+- tapOn: "Send OTP"
+- tapOn: "6-digit OTP"
+- inputText: "123456"
+- tapOn: "Verify and continue"
+
+# Membership requests screen
+- assertVisible: "2. Membership requests"
+- assertVisible: "Accept request"
+
+# Accept a request and complete profile
+- tapOn: "Accept request"
+- assertVisible: "2. Join club and complete profile"
+- tapOn: "Full name"
+- inputText: "Dummy Member"
+- tapOn: "Email"
+- inputText: "dummy.member@test.com"
+- tapOn: "Complete onboarding"
+
+# Post onboarding check
+- assertVisible: "3. Membership desk"
