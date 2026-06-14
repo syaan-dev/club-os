@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
   Pressable,
   Share,
   Text,
@@ -10,8 +11,16 @@ import {
 import { styles } from "../../src/styles";
 import { useClubOs } from "../../src/ClubOsContext";
 import type { Member } from "../../src/types";
+import { AppButton } from "../../src/components/AppButton";
 import { TabScreenShell } from "../../src/components/TabScreenShell";
 import { InviteSheet } from "../../src/components/InviteSheet";
+
+const ASSIGNABLE_ROLES: Member["role"][] = [
+  "Owner",
+  "Treasurer",
+  "Secretary",
+  "Member",
+];
 
 // Builds two-letter initials from a member name for the avatar circle.
 const initialsFor = (name: string) => {
@@ -29,10 +38,44 @@ const roleChipLabel = (member: Member) =>
   member.status === "invited" ? `${member.role} · pending` : member.role;
 
 export default function MembersScreen() {
-  const { members, invites, currentRole, loading } = useClubOs();
+  const {
+    members,
+    invites,
+    currentRole,
+    currentMemberId,
+    updateMemberRole,
+    loading,
+  } = useClubOs();
 
   const canInvite = currentRole === "Owner" || currentRole === "Treasurer";
+  // Owner, Treasurer and Secretary can reassign member roles.
+  const canManageRoles =
+    currentRole === "Owner" ||
+    currentRole === "Treasurer" ||
+    currentRole === "Secretary";
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [roleMember, setRoleMember] = useState<Member | null>(null);
+
+  // The role sheet only applies to active members (invited members must
+  // accept before a role means anything). Tapping your own row is a no-op
+  // because you cannot change your own role.
+  const openRoleSheet = (member: Member) => {
+    if (!canManageRoles || member.status !== "active") {
+      return;
+    }
+    if (member.id === currentMemberId) {
+      return;
+    }
+    setRoleMember(member);
+  };
+
+  const onAssignRole = async (role: Member["role"]) => {
+    if (!roleMember) {
+      return;
+    }
+    await updateMemberRole(roleMember.id, role);
+    setRoleMember(null);
+  };
 
   const inviteLink =
     invites.find((invite) => invite.inviteLink)?.inviteLink ??
@@ -93,21 +136,38 @@ export default function MembersScreen() {
               <Text style={styles.memberMeta}>No members yet.</Text>
             )
           }
-          renderItem={({ item }) => (
-            <View style={styles.directoryRow}>
-              <View style={styles.memberAvatar}>
-                <Text style={styles.memberAvatarText}>
-                  {initialsFor(item.name)}
+          renderItem={({ item }) => {
+            const manageable =
+              canManageRoles &&
+              item.status === "active" &&
+              item.id !== currentMemberId;
+            return (
+              <Pressable
+                style={styles.directoryRow}
+                onPress={() => openRoleSheet(item)}
+                disabled={!manageable}
+                accessibilityRole={manageable ? "button" : undefined}
+                accessibilityLabel={
+                  manageable ? `Manage role for ${item.name}` : undefined
+                }
+              >
+                <View style={styles.memberAvatar}>
+                  <Text style={styles.memberAvatarText}>
+                    {initialsFor(item.name)}
+                  </Text>
+                </View>
+                <Text style={styles.directoryName} numberOfLines={1}>
+                  {item.name}
                 </Text>
-              </View>
-              <Text style={styles.directoryName} numberOfLines={1}>
-                {item.name}
-              </Text>
-              <View style={styles.roleChip}>
-                <Text style={styles.roleChipText}>{roleChipLabel(item)}</Text>
-              </View>
-            </View>
-          )}
+                <View style={styles.roleChip}>
+                  <Text style={styles.roleChipText}>{roleChipLabel(item)}</Text>
+                </View>
+                {manageable ? (
+                  <Text style={styles.headerChevron}>›</Text>
+                ) : null}
+              </Pressable>
+            );
+          }}
         />
       )}
 
@@ -132,6 +192,56 @@ export default function MembersScreen() {
       ) : null}
 
       <InviteSheet visible={inviteOpen} onClose={() => setInviteOpen(false)} />
+
+      {/* Per-member role sheet (leadership only) */}
+      <Modal
+        visible={roleMember !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setRoleMember(null)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setRoleMember(null)}
+        >
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>
+              {roleMember ? roleMember.name : "Member role"}
+            </Text>
+            <Text style={styles.inviteSheetSubtitle}>
+              Tap a role to reassign. Owner has full access.
+            </Text>
+            <View style={styles.rolePillRow}>
+              {ASSIGNABLE_ROLES.map((role) => {
+                const active = roleMember?.role === role;
+                return (
+                  <Pressable
+                    key={role}
+                    style={[styles.rolePill, active && styles.rolePillActive]}
+                    disabled={loading || active}
+                    onPress={() => onAssignRole(role)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Set ${
+                      roleMember ? roleMember.name : "member"
+                    } as ${role}`}
+                  >
+                    <Text
+                      style={[
+                        styles.rolePillText,
+                        active && styles.rolePillTextActive,
+                      ]}
+                    >
+                      {role}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <AppButton label="Done" onPress={() => setRoleMember(null)} />
+          </Pressable>
+        </Pressable>
+      </Modal>
     </TabScreenShell>
   );
 }

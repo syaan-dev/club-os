@@ -10,6 +10,7 @@ import HomeScreen from "../app/home";
 import ClubScreen from "../app/club";
 import TabsLayout from "../app/(tabs)/_layout";
 import MembersScreen from "../app/(tabs)/members";
+import ActivityScreen from "../app/(tabs)/activity";
 import EconomyScreen from "../app/(tabs)/economy";
 import SetupScreen from "../app/(tabs)/setup";
 
@@ -121,6 +122,7 @@ const APP_DIR = {
   club: ClubScreen,
   "(tabs)/_layout": TabsLayout,
   "(tabs)/members": MembersScreen,
+  "(tabs)/activity": ActivityScreen,
   "(tabs)/economy": EconomyScreen,
   "(tabs)/setup": SetupScreen,
 };

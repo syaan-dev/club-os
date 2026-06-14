@@ -2,7 +2,7 @@ import { ReactNode } from "react";
 import { ActivityIndicator, ScrollView, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { styles } from "../styles";
+import { styles, colors } from "../styles";
 import { useClubOs } from "../ClubOsContext";
 import { AppButton } from "./AppButton";
 
@@ -13,7 +13,7 @@ export function ScreenShell({
   children: ReactNode;
   showLoading?: boolean;
 }) {
-  const { session, loading, errorText, infoText, logout } = useClubOs();
+  const { session, loading, logout } = useClubOs();
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -21,7 +21,7 @@ export function ScreenShell({
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <StatusBar style="light" />
+        <StatusBar style="dark" />
         <Text style={styles.stepText}>Club operations onboarding</Text>
         <Text style={styles.title}>Club OS onboarding</Text>
         <Text style={styles.subtitle}>
@@ -30,12 +30,10 @@ export function ScreenShell({
         {session ? (
           <AppButton label="Logout" onPress={logout} disabled={loading} />
         ) : null}
-        {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
-        {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
         {children}
         {showLoading && loading ? (
           <View>
-            <ActivityIndicator color="#0f4fa8" />
+            <ActivityIndicator color={colors.accent} />
           </View>
         ) : null}
       </ScrollView>

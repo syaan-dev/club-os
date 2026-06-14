@@ -1,5 +1,6 @@
 import { Tabs } from "expo-router";
 import { Text } from "react-native";
+import { colors } from "../../src/styles";
 
 function TabIcon({ symbol, color }: { symbol: string; color: string }) {
   return <Text style={{ fontSize: 18, color }}>{symbol}</Text>;
@@ -10,11 +11,11 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: "#4d8bf5",
-        tabBarInactiveTintColor: "#6b7280",
+        tabBarActiveTintColor: colors.accent,
+        tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {
-          backgroundColor: "#16181c",
-          borderTopColor: "#26292e",
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
         },
         tabBarLabelStyle: {
           fontSize: 12,
@@ -27,6 +28,13 @@ export default function TabsLayout() {
         options={{
           title: "Members",
           tabBarIcon: ({ color }) => <TabIcon symbol="👥" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="activity"
+        options={{
+          title: "Activity",
+          tabBarIcon: ({ color }) => <TabIcon symbol="🗳️" color={color} />,
         }}
       />
       <Tabs.Screen

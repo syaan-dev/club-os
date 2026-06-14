@@ -10,6 +10,7 @@ import HomeScreen from "../app/home";
 import ClubScreen from "../app/club";
 import TabsLayout from "../app/(tabs)/_layout";
 import MembersScreen from "../app/(tabs)/members";
+import ActivityScreen from "../app/(tabs)/activity";
 import EconomyScreen from "../app/(tabs)/economy";
 import SetupScreen from "../app/(tabs)/setup";
 
@@ -110,6 +111,7 @@ const APP_DIR = {
   club: ClubScreen,
   "(tabs)/_layout": TabsLayout,
   "(tabs)/members": MembersScreen,
+  "(tabs)/activity": ActivityScreen,
   "(tabs)/economy": EconomyScreen,
   "(tabs)/setup": SetupScreen,
 };
@@ -129,7 +131,8 @@ const sessionFor = (role: "owner" | "member") => ({
 });
 
 // Routes a single from() handler for a club where the current user holds `role`.
-const buildFromHandler = (role: "owner" | "member") =>
+const buildFromHandler =
+  (role: "owner" | "member") =>
   (table: string, query: QueryState): QueryResult => {
     if (table === "members") {
       // loadMembers: full roster for a club (filtered by club, not user).
@@ -226,7 +229,8 @@ describe("Dues & ledger role matrix", () => {
     expect(await screen.findByText("Dues plans")).toBeTruthy();
     expect(screen.getByText("Billing cycles")).toBeTruthy();
 
-    // Fill and submit the dues plan form.
+    // Open the plan sheet, then fill and submit the dues plan form.
+    fireEvent.press(screen.getByLabelText("New dues plan"));
     fireEvent.changeText(
       screen.getByLabelText("Plan name"),
       "Monthly Membership",
@@ -259,9 +263,14 @@ describe("Dues & ledger role matrix", () => {
 
     expect(await screen.findByText("Recent transactions")).toBeTruthy();
 
+    fireEvent.press(screen.getByLabelText("New transaction"));
+
     fireEvent.press(screen.getByLabelText("Transaction type expense"));
     fireEvent.changeText(screen.getByLabelText("Transaction amount"), "350");
-    fireEvent.changeText(screen.getByLabelText("Transaction category"), "Venue");
+    fireEvent.changeText(
+      screen.getByLabelText("Transaction category"),
+      "Venue",
+    );
     fireEvent.press(screen.getByText("Record transaction"));
 
     await waitFor(() => {

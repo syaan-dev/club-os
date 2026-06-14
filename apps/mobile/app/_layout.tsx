@@ -1,6 +1,8 @@
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Stack } from "expo-router";
 import { ClubOsProvider } from "../src/ClubOsContext";
+import { Toast } from "../src/components/Toast";
+import { colors } from "../src/styles";
 
 export default function RootLayout() {
   return (
@@ -9,9 +11,10 @@ export default function RootLayout() {
         <Stack
           screenOptions={{
             headerShown: false,
-            contentStyle: { backgroundColor: "#0f1113" },
+            contentStyle: { backgroundColor: colors.bg },
           }}
         />
+        <Toast />
       </ClubOsProvider>
     </SafeAreaProvider>
   );

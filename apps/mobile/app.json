@@ -24,10 +24,7 @@
       "bundler": "metro",
       "output": "single"
     },
-    "plugins": [
-      "expo-asset",
-      "expo-router"
-    ],
+    "plugins": ["expo-asset", "expo-router"],
     "experiments": {
       "typedRoutes": true
     }

@@ -36,7 +36,6 @@ export function ClubHeader() {
         </View>
         <Text style={styles.headerChevron}>⌄</Text>
       </Pressable>
-      <Text style={styles.headerBell}>🔔</Text>
       <ClubSwitchSheet
         visible={sheetVisible}
         onClose={() => setSheetVisible(false)}

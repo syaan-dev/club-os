@@ -12,6 +12,8 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
 import type {
+  Announcement,
+  ClubMeeting,
   ContactOption,
   DuesCycle,
   DuesFrequency,
@@ -19,16 +21,27 @@ import type {
   DuesSummary,
   Invite,
   LedgerEntry,
+  MeetingStatus,
   Member,
   MemberDue,
   MembershipRequest,
   MyClub,
+  Poll,
+  PollStatus,
   Screen,
   TransactionType,
 } from "./types";
 import { canManageFinances, deriveDuesSummary } from "./dues";
 
 const ACTIVE_CLUB_KEY = "clubos.activeClub";
+
+export type ToastKind = "success" | "error" | "info";
+
+export type ToastMessage = {
+  id: number;
+  message: string;
+  kind: ToastKind;
+};
 
 const screenToPath: Record<Screen, string> = {
   otp: "/",
@@ -38,9 +51,18 @@ const screenToPath: Record<Screen, string> = {
   club: "/club",
   memberProfile: "/member-profile",
   members: "/members",
+  activity: "/activity",
   economy: "/economy",
   setup: "/setup",
 };
+
+// Roles permitted to manage club activities (meetings, polls, announcements).
+// Mirrors the `*_manage_leadership` RLS policies. The Secretary owns meetings
+// and polls per the PRA role matrix; Owner/Treasurer are included for
+// operational continuity.
+function isLeadership(role: Member["role"] | ""): boolean {
+  return role === "Owner" || role === "Treasurer" || role === "Secretary";
+}
 
 type ClubOsContextValue = {
   phone: string;
@@ -63,7 +85,13 @@ type ClubOsContextValue = {
   duesCycles: DuesCycle[];
   ledgerEntries: LedgerEntry[];
   canManageDues: boolean;
+  meetings: ClubMeeting[];
+  polls: Poll[];
+  announcements: Announcement[];
+  activityLoading: boolean;
+  canManageActivities: boolean;
   currentRole: Member["role"] | "";
+  currentMemberId: string;
   invitePhone: string;
   setInvitePhone: (value: string) => void;
   inviteName: string;
@@ -85,8 +113,9 @@ type ClubOsContextValue = {
   onboardSkills: string;
   setOnboardSkills: (value: string) => void;
   loading: boolean;
-  errorText: string;
-  infoText: string;
+  toast: ToastMessage | null;
+  notify: (message: string, kind?: ToastKind) => void;
+  dismissToast: () => void;
   session: Session | null;
   clubId: string;
   activeClubName: string;
@@ -116,13 +145,35 @@ type ClubOsContextValue = {
     amount: number;
     frequency: DuesFrequency;
     graceDays: number;
+    autoGenerate: boolean;
+    startDate: string;
   }) => Promise<void>;
+  updateDuesPlan: (
+    planId: string,
+    input: {
+      name: string;
+      amount: number;
+      frequency: DuesFrequency;
+      graceDays: number;
+      autoGenerate: boolean;
+      startDate: string;
+    },
+  ) => Promise<void>;
   createDuesCycle: (input: {
     duesPlanId: string;
     cycleLabel: string;
     dueDate: string;
   }) => Promise<void>;
+  updateDuesCycle: (
+    cycleId: string,
+    input: {
+      duesPlanId: string;
+      cycleLabel: string;
+      dueDate: string;
+    },
+  ) => Promise<void>;
   generateDues: (cycleId: string) => Promise<void>;
+  ensureAutoDuesCycles: (options?: { announce?: boolean }) => Promise<void>;
   recordTransaction: (input: {
     type: TransactionType;
     amount: number;
@@ -130,8 +181,46 @@ type ClubOsContextValue = {
     paymentMethod: string;
     description: string;
   }) => Promise<void>;
+  refreshActivities: () => Promise<void>;
+  createMeeting: (input: {
+    title: string;
+    description: string;
+    location: string;
+    scheduledAt: string;
+  }) => Promise<void>;
+  updateMeetingStatus: (
+    meetingId: string,
+    status: MeetingStatus,
+  ) => Promise<void>;
+  updateMeeting: (
+    meetingId: string,
+    input: {
+      title: string;
+      description: string;
+      location: string;
+      scheduledAt: string;
+    },
+  ) => Promise<void>;
+  createPoll: (input: {
+    question: string;
+    options: string[];
+    closesAt: string;
+  }) => Promise<void>;
+  castVote: (pollId: string, optionIndex: number) => Promise<void>;
+  closePoll: (pollId: string) => Promise<void>;
+  createAnnouncement: (input: { title: string; body: string }) => Promise<void>;
+  setAnnouncementRead: (announcementId: string, read: boolean) => Promise<void>;
   resumeOnboarding: (request: MembershipRequest) => void;
   startCreateClub: () => void;
+  loadClubProfile: () => Promise<void>;
+  loadMyProfile: () => Promise<void>;
+  updateClubProfile: (name: string, description: string) => Promise<void>;
+  updateMemberRole: (
+    memberId: string,
+    newRole: Member["role"],
+  ) => Promise<void>;
+  saveProfile: () => Promise<void>;
+  leaveClub: () => Promise<void>;
   logout: () => Promise<void>;
 };
 
@@ -164,6 +253,10 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const [duesPlans, setDuesPlans] = useState<DuesPlan[]>([]);
   const [duesCycles, setDuesCycles] = useState<DuesCycle[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [meetings, setMeetings] = useState<ClubMeeting[]>([]);
+  const [polls, setPolls] = useState<Poll[]>([]);
+  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
   const [currentRole, setCurrentRole] = useState<Member["role"] | "">("");
   const [invitePhone, setInvitePhone] = useState("");
   const [inviteName, setInviteName] = useState("");
@@ -186,9 +279,21 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     "club" | "members" | "home"
   >("club");
   const [loading, setLoading] = useState(false);
-  const [errorText, setErrorText] = useState("");
-  const [infoText, setInfoText] = useState("");
+  const [toast, setToast] = useState<ToastMessage | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+
+  // Single source of action feedback. Renders as an auto-dismissing toast at
+  // the root. setErrorText/setInfoText are thin wrappers kept so the many
+  // existing call sites keep working while routing through the toast.
+  const notify = (message: string, kind: ToastKind = "info") => {
+    if (!message) {
+      return;
+    }
+    setToast({ id: Date.now() + Math.random(), message, kind });
+  };
+  const dismissToast = () => setToast(null);
+  const setErrorText = (message: string) => notify(message, "error");
+  const setInfoText = (message: string) => notify(message, "success");
   const [clubId, setClubId] = useState("");
   const [activeClubName, setActiveClubName] = useState("");
 
@@ -399,6 +504,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       loadDuesPlans(targetClubId),
       loadDuesCycles(targetClubId),
       loadLedger(targetClubId),
+      loadMeetings(targetClubId),
+      loadPolls(targetClubId),
+      loadAnnouncements(targetClubId),
     ]);
     setLoading(false);
     navigate("members");
@@ -423,6 +531,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       loadDuesPlans(targetClubId),
       loadDuesCycles(targetClubId),
       loadLedger(targetClubId),
+      loadMeetings(targetClubId),
+      loadPolls(targetClubId),
+      loadAnnouncements(targetClubId),
     ]);
     setLoading(false);
   };
@@ -607,7 +718,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const loadDuesPlans = async (activeClubId: string) => {
     const { data, error } = await supabase
       .from("dues_plans")
-      .select("id,name,amount,frequency,grace_days")
+      .select("id,name,amount,frequency,grace_days,auto_generate,start_date")
       .eq("club_id", activeClubId)
       .eq("is_active", true)
       .order("created_at", { ascending: false });
@@ -624,6 +735,8 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
         amount: Number(row.amount ?? 0),
         frequency: row.frequency as DuesFrequency,
         graceDays: Number(row.grace_days ?? 0),
+        autoGenerate: Boolean(row.auto_generate),
+        startDate: row.start_date ?? null,
       })),
     );
   };
@@ -682,11 +795,492 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const loadMeetings = async (activeClubId: string) => {
+    const { data, error } = await supabase
+      .from("club_meetings")
+      .select("id,title,description,location,scheduled_at,status,members(name)")
+      .eq("club_id", activeClubId)
+      .order("scheduled_at", { ascending: false });
+
+    if (error || !data) {
+      setMeetings([]);
+      return;
+    }
+
+    setMeetings(
+      data.map((row: any) => {
+        const creator = Array.isArray(row.members)
+          ? row.members[0]
+          : row.members;
+        return {
+          id: row.id,
+          title: row.title,
+          description: row.description ?? null,
+          location: row.location ?? null,
+          scheduledAt: row.scheduled_at ?? "",
+          status: row.status as MeetingStatus,
+          createdByName: creator?.name ?? "Someone",
+        } satisfies ClubMeeting;
+      }),
+    );
+  };
+
+  const loadPolls = async (activeClubId: string) => {
+    const { data, error } = await supabase
+      .from("club_polls")
+      .select("id,question,options,status,closes_at,created_at,members(name)")
+      .eq("club_id", activeClubId)
+      .order("created_at", { ascending: false });
+
+    if (error || !data) {
+      setPolls([]);
+      return;
+    }
+
+    const pollIds = data.map((row: any) => row.id);
+    let votes: any[] = [];
+    if (pollIds.length > 0) {
+      const { data: voteData } = await supabase
+        .from("poll_votes")
+        .select("poll_id,option_index,member_id")
+        .in("poll_id", pollIds);
+      votes = voteData ?? [];
+    }
+
+    const myId = currentMemberId;
+    setPolls(
+      data.map((row: any) => {
+        const creator = Array.isArray(row.members)
+          ? row.members[0]
+          : row.members;
+        const options: string[] = Array.isArray(row.options) ? row.options : [];
+        const voteCounts = options.map(() => 0);
+        let totalVotes = 0;
+        let myOptionIndex: number | null = null;
+        for (const vote of votes) {
+          if (vote.poll_id !== row.id) continue;
+          totalVotes += 1;
+          const idx = vote.option_index;
+          if (typeof idx === "number" && idx >= 0 && idx < voteCounts.length) {
+            voteCounts[idx] += 1;
+          }
+          if (myId && vote.member_id === myId) {
+            myOptionIndex = typeof idx === "number" ? idx : null;
+          }
+        }
+        return {
+          id: row.id,
+          question: row.question,
+          options,
+          status: row.status as PollStatus,
+          closesAt: row.closes_at ?? null,
+          createdByName: creator?.name ?? "Someone",
+          createdAt: row.created_at ?? "",
+          voteCounts,
+          totalVotes,
+          myOptionIndex,
+        } satisfies Poll;
+      }),
+    );
+  };
+
+  const loadAnnouncements = async (activeClubId: string) => {
+    const { data, error } = await supabase
+      .from("club_announcements")
+      .select("id,title,body,created_at,members(name)")
+      .eq("club_id", activeClubId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error || !data) {
+      setAnnouncements([]);
+      return;
+    }
+
+    const myId = currentMemberId;
+    const announcementIds = data.map((row: any) => row.id);
+    let readIds = new Set<string>();
+    if (myId && announcementIds.length > 0) {
+      const { data: reads } = await supabase
+        .from("announcement_reads")
+        .select("announcement_id")
+        .eq("member_id", myId)
+        .in("announcement_id", announcementIds);
+      readIds = new Set((reads ?? []).map((row: any) => row.announcement_id));
+    }
+
+    setAnnouncements(
+      data.map((row: any) => {
+        const creator = Array.isArray(row.members)
+          ? row.members[0]
+          : row.members;
+        return {
+          id: row.id,
+          title: row.title,
+          body: row.body,
+          createdByName: creator?.name ?? "Someone",
+          createdAt: row.created_at ?? "",
+          isRead: readIds.has(row.id),
+        } satisfies Announcement;
+      }),
+    );
+  };
+
+  const refreshActivities = async () => {
+    if (!clubId) {
+      return;
+    }
+    setActivityLoading(true);
+    await Promise.all([
+      loadMeetings(clubId),
+      loadPolls(clubId),
+      loadAnnouncements(clubId),
+    ]);
+    setActivityLoading(false);
+  };
+
+  const createMeeting = async (input: {
+    title: string;
+    description: string;
+    location: string;
+    scheduledAt: string;
+  }) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId || !currentMemberId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!isLeadership(currentRole)) {
+      setErrorText(
+        "Only an owner, treasurer or secretary can schedule meetings.",
+      );
+      return;
+    }
+    const title = input.title.trim();
+    if (!title) {
+      setErrorText("Meeting title is required.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.scheduledAt)) {
+      setErrorText("Date must be in YYYY-MM-DD format.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.from("club_meetings").insert({
+      club_id: clubId,
+      title,
+      description: input.description.trim() || null,
+      location: input.location.trim() || null,
+      scheduled_at: input.scheduledAt,
+      created_by: currentMemberId,
+    });
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadMeetings(clubId);
+    setInfoText(`Meeting "${title}" scheduled.`);
+  };
+
+  const updateMeetingStatus = async (
+    meetingId: string,
+    status: MeetingStatus,
+  ) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!isLeadership(currentRole)) {
+      setErrorText(
+        "Only an owner, treasurer or secretary can update meetings.",
+      );
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("club_meetings")
+      .update({ status })
+      .eq("id", meetingId)
+      .eq("club_id", clubId);
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadMeetings(clubId);
+  };
+
+  const updateMeeting = async (
+    meetingId: string,
+    input: {
+      title: string;
+      description: string;
+      location: string;
+      scheduledAt: string;
+    },
+  ) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!isLeadership(currentRole)) {
+      setErrorText("Only an owner, treasurer or secretary can edit meetings.");
+      return;
+    }
+    const title = input.title.trim();
+    if (!title) {
+      setErrorText("Meeting title is required.");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.scheduledAt)) {
+      setErrorText("Date must be in YYYY-MM-DD format.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("club_meetings")
+      .update({
+        title,
+        description: input.description.trim() || null,
+        location: input.location.trim() || null,
+        scheduled_at: input.scheduledAt,
+      })
+      .eq("id", meetingId)
+      .eq("club_id", clubId);
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadMeetings(clubId);
+    setInfoText(`Meeting "${title}" updated.`);
+  };
+
+  const createPoll = async (input: {
+    question: string;
+    options: string[];
+    closesAt: string;
+  }) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId || !currentMemberId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!isLeadership(currentRole)) {
+      setErrorText("Only an owner, treasurer or secretary can create polls.");
+      return;
+    }
+    const question = input.question.trim();
+    if (!question) {
+      setErrorText("Poll question is required.");
+      return;
+    }
+    const options = input.options.map((o) => o.trim()).filter(Boolean);
+    if (options.length < 2) {
+      setErrorText("Add at least two options.");
+      return;
+    }
+    if (options.length > 10) {
+      setErrorText("A poll can have at most 10 options.");
+      return;
+    }
+    if (input.closesAt && !/^\d{4}-\d{2}-\d{2}$/.test(input.closesAt)) {
+      setErrorText("Close date must be in YYYY-MM-DD format.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.from("club_polls").insert({
+      club_id: clubId,
+      question,
+      options,
+      closes_at: input.closesAt ? input.closesAt : null,
+      created_by: currentMemberId,
+    });
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadPolls(clubId);
+    setInfoText("Poll created.");
+  };
+
+  const castVote = async (pollId: string, optionIndex: number) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId || !currentMemberId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.from("poll_votes").upsert(
+      {
+        club_id: clubId,
+        poll_id: pollId,
+        member_id: currentMemberId,
+        option_index: optionIndex,
+      },
+      { onConflict: "poll_id,member_id" },
+    );
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadPolls(clubId);
+  };
+
+  const closePoll = async (pollId: string) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!isLeadership(currentRole)) {
+      setErrorText("Only an owner, treasurer or secretary can close polls.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("club_polls")
+      .update({ status: "closed" })
+      .eq("id", pollId)
+      .eq("club_id", clubId);
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadPolls(clubId);
+    setInfoText("Poll closed.");
+  };
+
+  const createAnnouncement = async (input: { title: string; body: string }) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId || !currentMemberId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!isLeadership(currentRole)) {
+      setErrorText(
+        "Only an owner, treasurer or secretary can post announcements.",
+      );
+      return;
+    }
+    const title = input.title.trim();
+    const body = input.body.trim();
+    if (!title) {
+      setErrorText("Announcement title is required.");
+      return;
+    }
+    if (!body) {
+      setErrorText("Announcement message is required.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.from("club_announcements").insert({
+      club_id: clubId,
+      title,
+      body,
+      created_by: currentMemberId,
+    });
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadAnnouncements(clubId);
+    setInfoText("Announcement posted.");
+  };
+
+  const setAnnouncementRead = async (announcementId: string, read: boolean) => {
+    if (!clubId || !currentMemberId) {
+      return;
+    }
+
+    // Optimistically update the local list so the badge and item react fast.
+    setAnnouncements((prev) =>
+      prev.map((item) =>
+        item.id === announcementId ? { ...item, isRead: read } : item,
+      ),
+    );
+
+    if (read) {
+      const { error } = await supabase.from("announcement_reads").upsert(
+        {
+          announcement_id: announcementId,
+          member_id: currentMemberId,
+          club_id: clubId,
+        },
+        { onConflict: "announcement_id,member_id" },
+      );
+      if (error) {
+        setAnnouncements((prev) =>
+          prev.map((item) =>
+            item.id === announcementId ? { ...item, isRead: false } : item,
+          ),
+        );
+      }
+    } else {
+      const { error } = await supabase
+        .from("announcement_reads")
+        .delete()
+        .eq("announcement_id", announcementId)
+        .eq("member_id", currentMemberId);
+      if (error) {
+        setAnnouncements((prev) =>
+          prev.map((item) =>
+            item.id === announcementId ? { ...item, isRead: true } : item,
+          ),
+        );
+      }
+    }
+  };
+
   const createDuesPlan = async (input: {
     name: string;
     amount: number;
     frequency: DuesFrequency;
     graceDays: number;
+    autoGenerate: boolean;
+    startDate: string;
   }) => {
     setErrorText("");
     setInfoText("");
@@ -713,6 +1307,11 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       setErrorText("Grace days must be a non-negative whole number.");
       return;
     }
+    const startDate = input.startDate.trim();
+    if (input.autoGenerate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      setErrorText("Auto-billing needs a start date in YYYY-MM-DD format.");
+      return;
+    }
 
     setLoading(true);
     const { error } = await supabase.from("dues_plans").insert({
@@ -721,6 +1320,8 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       amount: input.amount,
       frequency: input.frequency,
       grace_days: input.graceDays,
+      auto_generate: input.autoGenerate,
+      start_date: input.autoGenerate ? startDate : null,
       created_by: currentMemberId,
     });
     setLoading(false);
@@ -731,7 +1332,79 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     }
 
     await loadDuesPlans(clubId);
+    if (input.autoGenerate) {
+      await ensureAutoDuesCycles();
+    }
     setInfoText(`Dues plan "${name}" created.`);
+  };
+
+  const updateDuesPlan = async (
+    planId: string,
+    input: {
+      name: string;
+      amount: number;
+      frequency: DuesFrequency;
+      graceDays: number;
+      autoGenerate: boolean;
+      startDate: string;
+    },
+  ) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!canManageFinances(currentRole)) {
+      setErrorText("Only an owner or treasurer can edit dues plans.");
+      return;
+    }
+
+    const name = input.name.trim();
+    if (!name) {
+      setErrorText("Plan name is required.");
+      return;
+    }
+    if (!(input.amount > 0)) {
+      setErrorText("Amount must be greater than zero.");
+      return;
+    }
+    if (!Number.isInteger(input.graceDays) || input.graceDays < 0) {
+      setErrorText("Grace days must be a non-negative whole number.");
+      return;
+    }
+    const startDate = input.startDate.trim();
+    if (input.autoGenerate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+      setErrorText("Auto-billing needs a start date in YYYY-MM-DD format.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("dues_plans")
+      .update({
+        name,
+        amount: input.amount,
+        frequency: input.frequency,
+        grace_days: input.graceDays,
+        auto_generate: input.autoGenerate,
+        start_date: input.autoGenerate ? startDate : null,
+      })
+      .eq("id", planId)
+      .eq("club_id", clubId);
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadDuesPlans(clubId);
+    if (input.autoGenerate) {
+      await ensureAutoDuesCycles();
+    }
+    setInfoText(`Dues plan "${name}" updated.`);
   };
 
   const createDuesCycle = async (input: {
@@ -782,6 +1455,60 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setInfoText(`Dues cycle "${cycleLabel}" created.`);
   };
 
+  const updateDuesCycle = async (
+    cycleId: string,
+    input: {
+      duesPlanId: string;
+      cycleLabel: string;
+      dueDate: string;
+    },
+  ) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!canManageFinances(currentRole)) {
+      setErrorText("Only an owner or treasurer can edit dues cycles.");
+      return;
+    }
+    if (!input.duesPlanId) {
+      setErrorText("Select a dues plan for this cycle.");
+      return;
+    }
+    const cycleLabel = input.cycleLabel.trim();
+    if (!cycleLabel) {
+      setErrorText("Cycle label is required (e.g. 2026-06).");
+      return;
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) {
+      setErrorText("Due date must be in YYYY-MM-DD format.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("dues_cycles")
+      .update({
+        dues_plan_id: input.duesPlanId,
+        cycle_label: cycleLabel,
+        due_date: input.dueDate,
+      })
+      .eq("id", cycleId)
+      .eq("club_id", clubId);
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadDuesCycles(clubId);
+    setInfoText(`Dues cycle "${cycleLabel}" updated.`);
+  };
+
   const generateDues = async (cycleId: string) => {
     setErrorText("");
     setInfoText("");
@@ -814,6 +1541,48 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
         ? `Billed ${count} member${count === 1 ? "" : "s"} for this cycle.`
         : "No new dues to generate — everyone is already billed.",
     );
+  };
+
+  const ensureAutoDuesCycles = async (options?: { announce?: boolean }) => {
+    const announce = options?.announce ?? false;
+    if (!clubId) {
+      return;
+    }
+    if (!canManageFinances(currentRole)) {
+      return;
+    }
+
+    const autoPlans = duesPlans.filter(
+      (plan) => plan.autoGenerate && plan.startDate,
+    );
+    if (autoPlans.length === 0) {
+      if (announce) {
+        setInfoText("No auto-billing plans set up yet.");
+      }
+      return;
+    }
+
+    let created = 0;
+    for (const plan of autoPlans) {
+      const { data, error } = await supabase.rpc(
+        "ensure_dues_cycles_for_plan",
+        { _plan_id: plan.id },
+      );
+      if (error) {
+        setErrorText(error.message);
+        return;
+      }
+      created += typeof data === "number" ? data : 0;
+    }
+
+    if (created > 0) {
+      await Promise.all([loadDuesCycles(clubId), loadDues(clubId)]);
+      setInfoText(
+        `Auto-billing created ${created} new cycle${created === 1 ? "" : "s"}.`,
+      );
+    } else if (announce) {
+      setInfoText("Auto-billing is up to date — no new cycles.");
+    }
   };
 
   const recordTransaction = async (input: {
@@ -902,6 +1671,14 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     const hasBasicProfile = Boolean(
       metadataName && (metadataEmail || user.email),
     );
+
+    // Populate the editable profile fields for every authenticated user so the
+    // Setup tab's "Your profile" always reflects the logged-in account, even
+    // when the user lands straight in a club (active-membership branch below).
+    setOnboardName(metadataName);
+    setOnboardEmail(metadataEmail || user.email || "");
+    setOnboardLocation(metadataLocation);
+    setOnboardSkills(metadataSkills);
 
     const { data: activeMemberships, error: activeMembershipsError } =
       await supabase
@@ -1413,6 +2190,232 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     navigate("members");
   };
 
+  const loadClubProfile = async () => {
+    if (!clubId) {
+      return;
+    }
+    const { data } = await supabase
+      .from("clubs")
+      .select("name,description")
+      .eq("id", clubId)
+      .maybeSingle();
+    if (data) {
+      setClubName(data.name ?? "");
+      setClubDescription(data.description ?? "");
+    }
+  };
+
+  // Refreshes the editable profile fields from the logged-in account so the
+  // Setup "Your profile" sheet always shows current values.
+  const loadMyProfile = async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return;
+    }
+    const metadataName =
+      typeof user.user_metadata?.full_name === "string"
+        ? user.user_metadata.full_name.trim()
+        : "";
+    const metadataEmail =
+      typeof user.user_metadata?.member_email === "string"
+        ? user.user_metadata.member_email.trim()
+        : "";
+    const metadataLocation =
+      typeof user.user_metadata?.location === "string"
+        ? user.user_metadata.location
+        : "";
+    const metadataSkills =
+      typeof user.user_metadata?.skills === "string"
+        ? user.user_metadata.skills
+        : "";
+    setOnboardName(metadataName);
+    setOnboardEmail(metadataEmail || user.email || "");
+    setOnboardLocation(metadataLocation);
+    setOnboardSkills(metadataSkills);
+  };
+
+  const updateClubProfile = async (name: string, description: string) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("No active club to update.");
+      return;
+    }
+    if (currentRole === "Member" || currentRole === "") {
+      setErrorText("You don't have permission to edit the club profile.");
+      return;
+    }
+
+    const trimmedName = name.trim();
+    const trimmedDescription = description.trim();
+    if (!trimmedName) {
+      setErrorText("Club name is required.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("clubs")
+      .update({
+        name: trimmedName,
+        description: trimmedDescription || null,
+      })
+      .eq("id", clubId);
+
+    if (error) {
+      setLoading(false);
+      setErrorText(error.message);
+      return;
+    }
+
+    await supabase.from("audit_events").insert({
+      club_id: clubId,
+      actor_member_id: currentMemberId || null,
+      event_type: "club_profile_updated",
+      entity_type: "club",
+      entity_id: clubId,
+      event_data: { name: trimmedName },
+    });
+
+    setActiveClubName(trimmedName);
+    setClubName(trimmedName);
+    setClubDescription(trimmedDescription);
+    void persistActiveClub(clubId, trimmedName);
+    await loadHomeData();
+    setLoading(false);
+    setInfoText("Club profile updated.");
+  };
+
+  const updateMemberRole = async (
+    memberId: string,
+    newRole: Member["role"],
+  ) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("No active club.");
+      return;
+    }
+    if (currentRole === "Member" || currentRole === "") {
+      setErrorText("You don't have permission to change member roles.");
+      return;
+    }
+    if (memberId === currentMemberId) {
+      setErrorText("You can't change your own role.");
+      return;
+    }
+
+    const dbRole = newRole.toLowerCase();
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("members")
+      .update({ role: dbRole })
+      .eq("id", memberId)
+      .eq("club_id", clubId);
+
+    if (error) {
+      setLoading(false);
+      setErrorText(error.message);
+      return;
+    }
+
+    await supabase.from("audit_events").insert({
+      club_id: clubId,
+      actor_member_id: currentMemberId || null,
+      event_type: "member_role_changed",
+      entity_type: "member",
+      entity_id: memberId,
+      event_data: { new_role: dbRole },
+    });
+
+    await loadMembers(clubId);
+    setLoading(false);
+    setInfoText("Member role updated.");
+  };
+
+  const saveProfile = async () => {
+    setErrorText("");
+    setInfoText("");
+
+    const trimmedName = onboardName.trim();
+    const trimmedEmail = onboardEmail.trim().toLowerCase();
+
+    if (!trimmedName || !trimmedEmail) {
+      setErrorText("Name and email are required.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser({
+      data: {
+        full_name: trimmedName,
+        member_email: trimmedEmail,
+        location: onboardLocation.trim() || null,
+        skills: onboardSkills.trim() || null,
+      },
+    });
+
+    if (error) {
+      setLoading(false);
+      setErrorText(error.message);
+      return;
+    }
+
+    // Best-effort sync of the directory row. Owners/treasurers can write any
+    // member row; a plain member's own-row write is blocked by RLS, so we
+    // ignore that failure rather than surfacing a confusing error.
+    if (clubId && currentMemberId) {
+      const { error: syncError } = await supabase
+        .from("members")
+        .update({ name: trimmedName, email: trimmedEmail })
+        .eq("id", currentMemberId);
+      if (!syncError) {
+        await loadMembers(clubId);
+      }
+    }
+
+    setLoading(false);
+    setInfoText("Profile updated.");
+  };
+
+  const leaveClub = async () => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId || !currentMemberId) {
+      setErrorText("No active club to leave.");
+      return;
+    }
+    if (currentRole === "Owner") {
+      setErrorText(
+        "Owners can't leave their own club. Transfer ownership first.",
+      );
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("members")
+      .update({ membership_status: "left", is_active: false })
+      .eq("id", currentMemberId);
+
+    if (error) {
+      setLoading(false);
+      setErrorText(error.message);
+      return;
+    }
+
+    setLoading(false);
+    void clearPersistedActiveClub();
+    setInfoText("You have left the club.");
+    await goHome();
+  };
+
   const logout = async () => {
     setErrorText("");
     setInfoText("");
@@ -1441,6 +2444,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const unpaidCount = duesSummary.unpaidCount;
   const collectionPercent = duesSummary.collectionPercent;
   const canManageDues = canManageFinances(currentRole);
+  const canManageActivities = isLeadership(currentRole);
 
   const inviteMember = async () => {
     setErrorText("");
@@ -1726,7 +2730,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
           : `${invitedCount} invites sent. They'll appear as invited until they join.`,
       );
     } else {
-      setInfoText("No new invites sent — those contacts are already in the club.");
+      setInfoText(
+        "No new invites sent — those contacts are already in the club.",
+      );
     }
 
     return invitedCount;
@@ -1772,7 +2778,13 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     duesCycles,
     ledgerEntries,
     canManageDues,
+    meetings,
+    polls,
+    announcements,
+    activityLoading,
+    canManageActivities,
     currentRole,
+    currentMemberId,
     invitePhone,
     setInvitePhone,
     inviteName,
@@ -1794,8 +2806,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     onboardSkills,
     setOnboardSkills,
     loading,
-    errorText,
-    infoText,
+    toast,
+    notify,
+    dismissToast,
     session,
     clubId,
     activeClubName,
@@ -1821,11 +2834,29 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     switchClub,
     refreshDues,
     createDuesPlan,
+    updateDuesPlan,
     createDuesCycle,
+    updateDuesCycle,
     generateDues,
+    ensureAutoDuesCycles,
     recordTransaction,
+    refreshActivities,
+    createMeeting,
+    updateMeetingStatus,
+    updateMeeting,
+    createPoll,
+    castVote,
+    closePoll,
+    createAnnouncement,
+    setAnnouncementRead,
     resumeOnboarding,
     startCreateClub,
+    loadClubProfile,
+    loadMyProfile,
+    updateClubProfile,
+    updateMemberRole,
+    saveProfile,
+    leaveClub,
     logout,
   };
 

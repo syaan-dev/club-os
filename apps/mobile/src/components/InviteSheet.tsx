@@ -320,9 +320,7 @@ export function InviteSheet({
           onPress={() => setMode("picker")}
           accessibilityRole="button"
         >
-          <Text style={styles.inviteSheetAltLinkText}>
-            Back to contacts
-          </Text>
+          <Text style={styles.inviteSheetAltLinkText}>Back to contacts</Text>
         </Pressable>
       ) : null}
     </View>

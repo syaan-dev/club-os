@@ -60,9 +60,17 @@ export function markOverdue(
   today: string,
 ): DueState {
   if (due.status === "pending" && due.dueDate && due.dueDate < today) {
-    return { amountDue: due.amountDue, amountPaid: due.amountPaid, status: "overdue" };
+    return {
+      amountDue: due.amountDue,
+      amountPaid: due.amountPaid,
+      status: "overdue",
+    };
   }
-  return { amountDue: due.amountDue, amountPaid: due.amountPaid, status: due.status };
+  return {
+    amountDue: due.amountDue,
+    amountPaid: due.amountPaid,
+    status: due.status,
+  };
 }
 
 // Aggregates a list of member dues into the dashboard summary. A member is
@@ -82,8 +90,6 @@ export function deriveDuesSummary(dues: MemberDue[]): DuesSummary {
     overdueCount: dues.filter((due) => due.status === "overdue").length,
     waivedCount: dues.filter((due) => due.status === "waived").length,
     collectionPercent:
-      totalBilled === 0
-        ? 0
-        : Math.round((totalCollected / totalBilled) * 100),
+      totalBilled === 0 ? 0 : Math.round((totalCollected / totalBilled) * 100),
   };
 }

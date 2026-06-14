@@ -6,6 +6,7 @@ export type Screen =
   | "club"
   | "memberProfile"
   | "members"
+  | "activity"
   | "economy"
   | "setup";
 
@@ -82,6 +83,8 @@ export type DuesPlan = {
   amount: number;
   frequency: DuesFrequency;
   graceDays: number;
+  autoGenerate: boolean;
+  startDate: string | null;
 };
 
 export type DuesCycle = {
@@ -102,4 +105,40 @@ export type LedgerEntry = {
   paymentMethod: string;
   description: string | null;
   createdAt: string;
+};
+
+export type MeetingStatus = "scheduled" | "completed" | "cancelled";
+
+export type ClubMeeting = {
+  id: string;
+  title: string;
+  description: string | null;
+  location: string | null;
+  scheduledAt: string;
+  status: MeetingStatus;
+  createdByName: string;
+};
+
+export type PollStatus = "open" | "closed";
+
+export type Poll = {
+  id: string;
+  question: string;
+  options: string[];
+  status: PollStatus;
+  closesAt: string | null;
+  createdByName: string;
+  createdAt: string;
+  voteCounts: number[];
+  totalVotes: number;
+  myOptionIndex: number | null;
+};
+
+export type Announcement = {
+  id: string;
+  title: string;
+  body: string;
+  createdByName: string;
+  createdAt: string;
+  isRead: boolean;
 };

@@ -1,0 +1,36 @@
+<svg width="880" height="240" viewBox="0 0 880 240" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Club OS">
+  <defs>
+    <linearGradient id="brandW" x1="40" y1="40" x2="200" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4d8bf5" />
+      <stop offset="1" stop-color="#3a6ff7" />
+    </linearGradient>
+  </defs>
+
+  <!-- Mark -->
+  <g transform="translate(40 40)">
+    <rect x="0" y="0" width="160" height="160" rx="38" fill="#ffffff" stroke="#e3e6ea" stroke-width="2" />
+    <g transform="translate(80 80) scale(0.5) translate(-256 -256)">
+      <circle cx="256" cy="256" r="52" fill="url(#brandW)" />
+      <g fill="url(#brandW)">
+        <circle cx="256" cy="120" r="30" />
+        <circle cx="374" cy="188" r="30" />
+        <circle cx="374" cy="324" r="30" />
+        <circle cx="256" cy="392" r="30" />
+        <circle cx="138" cy="324" r="30" />
+        <circle cx="138" cy="188" r="30" />
+      </g>
+      <g stroke="url(#brandW)" stroke-width="14" stroke-linecap="round" opacity="0.55">
+        <line x1="256" y1="256" x2="256" y2="120" />
+        <line x1="256" y1="256" x2="374" y2="188" />
+        <line x1="256" y1="256" x2="374" y2="324" />
+        <line x1="256" y1="256" x2="256" y2="392" />
+        <line x1="256" y1="256" x2="138" y2="324" />
+        <line x1="256" y1="256" x2="138" y2="188" />
+      </g>
+    </g>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="240" y="142" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="96" font-weight="700" fill="#1a1d21">Club</text>
+  <text x="240" y="200" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="40" font-weight="600" letter-spacing="14" fill="#5b626c">OPERATIONS · OS</text>
+</svg>

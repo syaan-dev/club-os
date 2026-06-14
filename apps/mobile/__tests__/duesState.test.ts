@@ -90,15 +90,15 @@ describe("waiveDue", () => {
 
 describe("markOverdue", () => {
   it("flips a pending due past its due date", () => {
-    expect(markOverdue(due({ dueDate: "2026-06-01" }), "2026-06-10").status).toBe(
-      "overdue",
-    );
+    expect(
+      markOverdue(due({ dueDate: "2026-06-01" }), "2026-06-10").status,
+    ).toBe("overdue");
   });
 
   it("leaves a not-yet-due pending due untouched", () => {
-    expect(markOverdue(due({ dueDate: "2026-07-01" }), "2026-06-10").status).toBe(
-      "pending",
-    );
+    expect(
+      markOverdue(due({ dueDate: "2026-07-01" }), "2026-06-10").status,
+    ).toBe("pending");
   });
 
   it("never reopens paid or waived dues", () => {
@@ -107,8 +107,10 @@ describe("markOverdue", () => {
         .status,
     ).toBe("paid");
     expect(
-      markOverdue(due({ status: "waived", dueDate: "2026-06-01" }), "2026-06-10")
-        .status,
+      markOverdue(
+        due({ status: "waived", dueDate: "2026-06-01" }),
+        "2026-06-10",
+      ).status,
     ).toBe("waived");
   });
 });

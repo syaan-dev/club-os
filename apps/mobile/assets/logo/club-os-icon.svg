@@ -1,0 +1,44 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Club OS logo">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="1" stop-color="#f1f3f6" />
+    </linearGradient>
+    <linearGradient id="brand" x1="120" y1="96" x2="392" y2="416" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4d8bf5" />
+      <stop offset="1" stop-color="#3a6ff7" />
+    </linearGradient>
+  </defs>
+
+  <!-- App tile -->
+  <rect x="16" y="16" width="480" height="480" rx="112" fill="url(#bg)" stroke="#e3e6ea" stroke-width="2" />
+
+  <!-- Connected members ring: a "club" of people orbiting a core -->
+  <g stroke="url(#brand)" stroke-width="16" stroke-linecap="round" fill="none" opacity="0.9">
+    <circle cx="256" cy="256" r="120" stroke-dasharray="6 40" opacity="0.45" />
+  </g>
+
+  <!-- Core node -->
+  <circle cx="256" cy="256" r="52" fill="url(#brand)" />
+  <circle cx="256" cy="256" r="52" fill="none" stroke="#ffffff" stroke-width="6" opacity="0.25" />
+
+  <!-- Member nodes -->
+  <g fill="url(#brand)">
+    <circle cx="256" cy="120" r="30" />
+    <circle cx="374" cy="188" r="30" />
+    <circle cx="374" cy="324" r="30" />
+    <circle cx="256" cy="392" r="30" />
+    <circle cx="138" cy="324" r="30" />
+    <circle cx="138" cy="188" r="30" />
+  </g>
+
+  <!-- Spokes from core to members -->
+  <g stroke="url(#brand)" stroke-width="14" stroke-linecap="round" opacity="0.55">
+    <line x1="256" y1="256" x2="256" y2="120" />
+    <line x1="256" y1="256" x2="374" y2="188" />
+    <line x1="256" y1="256" x2="374" y2="324" />
+    <line x1="256" y1="256" x2="256" y2="392" />
+    <line x1="256" y1="256" x2="138" y2="324" />
+    <line x1="256" y1="256" x2="138" y2="188" />
+  </g>
+</svg>

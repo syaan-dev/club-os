@@ -1,5 +1,5 @@
 import { ActivityIndicator, Text, TextInput, View } from "react-native";
-import { styles } from "../src/styles";
+import { styles, colors } from "../src/styles";
 import { useClubOs } from "../src/ClubOsContext";
 import { AppButton } from "../src/components/AppButton";
 import { ScreenShell } from "../src/components/ScreenShell";
@@ -35,7 +35,7 @@ export default function ClubScreen() {
           onPress={createClub}
           disabled={loading || !clubName.trim() || !clubDescription.trim()}
         />
-        {loading ? <ActivityIndicator color="#0f4fa8" /> : null}
+        {loading ? <ActivityIndicator color={colors.accent} /> : null}
       </View>
     </ScreenShell>
   );

@@ -1,8 +1,8 @@
 import { ReactNode } from "react";
-import { ActivityIndicator, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { styles } from "../styles";
+import { styles, colors } from "../styles";
 import { useClubOs } from "../ClubOsContext";
 import { ClubHeader } from "./ClubHeader";
 
@@ -13,22 +13,20 @@ export function TabScreenShell({
   children: ReactNode;
   showLoading?: boolean;
 }) {
-  const { loading, errorText, infoText } = useClubOs();
+  const { loading } = useClubOs();
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "left", "right"]}>
-      <StatusBar style="light" />
+      <StatusBar style="dark" />
       <ClubHeader />
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        {errorText ? <Text style={styles.errorText}>{errorText}</Text> : null}
-        {infoText ? <Text style={styles.infoText}>{infoText}</Text> : null}
         {children}
         {showLoading && loading ? (
           <View>
-            <ActivityIndicator color="#0f4fa8" />
+            <ActivityIndicator color={colors.accent} />
           </View>
         ) : null}
       </ScrollView>

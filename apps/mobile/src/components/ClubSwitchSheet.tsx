@@ -1,10 +1,4 @@
-import {
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { styles } from "../styles";
 import { useClubOs } from "../ClubOsContext";
 
@@ -53,10 +47,7 @@ export function ClubSwitchSheet({
                 return (
                   <Pressable
                     key={club.clubId}
-                    style={[
-                      styles.switchRow,
-                      active && styles.switchRowActive,
-                    ]}
+                    style={[styles.switchRow, active && styles.switchRowActive]}
                     onPress={() => handleSelect(club.clubId, club.name)}
                     accessibilityRole="button"
                     accessibilityLabel={`Switch to ${club.name}`}
@@ -70,9 +61,7 @@ export function ClubSwitchSheet({
                       <Text style={styles.headerClubName}>{club.name}</Text>
                       <Text style={styles.headerRole}>{club.role}</Text>
                     </View>
-                    {active ? (
-                      <Text style={styles.switchCheck}>✓</Text>
-                    ) : null}
+                    {active ? <Text style={styles.switchCheck}>✓</Text> : null}
                   </Pressable>
                 );
               })
