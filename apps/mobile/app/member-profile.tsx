@@ -1,8 +1,8 @@
-import { ActivityIndicator, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { styles, colors } from "../src/styles";
 import { useClubOs } from "../src/ClubOsContext";
 import { AppButton } from "../src/components/AppButton";
-import { ScreenShell } from "../src/components/ScreenShell";
+import { OnboardingShell } from "../src/components/OnboardingShell";
 
 export default function MemberProfileScreen() {
   const {
@@ -20,22 +20,25 @@ export default function MemberProfileScreen() {
   } = useClubOs();
 
   return (
-    <ScreenShell>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>2. Join club and complete profile</Text>
-        <Text style={styles.memberMeta}>
-          Invited to: {pendingClubName || "Your club"}
+    <OnboardingShell showLoading>
+      <View style={styles.authCard}>
+        <Text style={styles.authHeading}>Join the club</Text>
+        <Text style={styles.authSubtext}>
+          Invited to {pendingClubName || "your club"} — complete your profile to
+          continue.
         </Text>
         <TextInput
           value={onboardName}
           onChangeText={setOnboardName}
           placeholder="Full name"
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
         />
         <TextInput
           value={onboardEmail}
           onChangeText={setOnboardEmail}
           placeholder="Email"
+          placeholderTextColor={colors.textMuted}
           keyboardType="email-address"
           autoCapitalize="none"
           style={styles.input}
@@ -43,13 +46,15 @@ export default function MemberProfileScreen() {
         <TextInput
           value={onboardLocation}
           onChangeText={setOnboardLocation}
-          placeholder="Location / City (optional)"
+          placeholder="City (optional)"
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
         />
         <TextInput
           value={onboardSkills}
           onChangeText={setOnboardSkills}
-          placeholder="Skills / Interests (optional)"
+          placeholder="Skills or interests (optional)"
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
         />
         <AppButton
@@ -57,8 +62,7 @@ export default function MemberProfileScreen() {
           onPress={completeMemberOnboarding}
           disabled={loading || !onboardName.trim() || !onboardEmail.trim()}
         />
-        {loading ? <ActivityIndicator color={colors.accent} /> : null}
       </View>
-    </ScreenShell>
+    </OnboardingShell>
   );
 }

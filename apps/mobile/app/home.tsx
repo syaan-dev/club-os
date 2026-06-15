@@ -1,8 +1,8 @@
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { styles } from "../src/styles";
 import { useClubOs } from "../src/ClubOsContext";
 import { AppButton } from "../src/components/AppButton";
-import { ScreenShell } from "../src/components/ScreenShell";
+import { OnboardingShell } from "../src/components/OnboardingShell";
 
 export default function HomeScreen() {
   const {
@@ -13,7 +13,6 @@ export default function HomeScreen() {
     startCreateClub,
     acceptMembershipRequest,
     declineInviteFromHome,
-    goHome,
   } = useClubOs();
 
   const pendingInvites = membershipRequests.filter(
@@ -21,16 +20,13 @@ export default function HomeScreen() {
   );
 
   return (
-    <ScreenShell>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>Your clubs</Text>
-        <Text style={styles.memberMeta}>
-          Open a club to manage members and dues, or create a new one.
-        </Text>
+    <OnboardingShell showLoading>
+      <View style={styles.authCard}>
+        <Text style={styles.authHeading}>Your clubs</Text>
 
         {myClubs.length === 0 ? (
-          <Text style={styles.memberMeta}>
-            You are not part of any club yet. Create one to get started.
+          <Text style={styles.authSubtext}>
+            You're not in a club yet. Create one to get started.
           </Text>
         ) : (
           myClubs.map((club) => (
@@ -42,10 +38,7 @@ export default function HomeScreen() {
             >
               <View style={styles.clubRowText}>
                 <Text style={styles.memberName}>{club.name}</Text>
-                {club.description ? (
-                  <Text style={styles.memberMeta}>{club.description}</Text>
-                ) : null}
-                <Text style={styles.memberMeta}>Role: {club.role}</Text>
+                <Text style={styles.memberMeta}>{club.role}</Text>
               </View>
               <Text style={styles.clubChevron}>›</Text>
             </Pressable>
@@ -53,40 +46,34 @@ export default function HomeScreen() {
         )}
 
         <AppButton
-          label="Create a new club"
+          label="Create a club"
           onPress={startCreateClub}
           disabled={loading}
         />
-
-        {pendingInvites.length > 0 ? (
-          <View>
-            <Text style={styles.subTitle}>Club invitations</Text>
-            {pendingInvites.map((request) => (
-              <View key={request.inviteId} style={styles.inviteRow}>
-                <Text style={styles.memberName}>{request.clubName}</Text>
-                <Text style={styles.memberMeta}>
-                  You have been invited to join this club.
-                </Text>
-                <View style={styles.rowActions}>
-                  <AppButton
-                    label="Accept invitation"
-                    onPress={() => acceptMembershipRequest(request)}
-                    disabled={loading}
-                  />
-                  <AppButton
-                    label="Decline"
-                    onPress={() => declineInviteFromHome(request)}
-                    disabled={loading}
-                  />
-                </View>
-              </View>
-            ))}
-          </View>
-        ) : null}
-
-        <AppButton label="Refresh" onPress={goHome} disabled={loading} />
-        {loading ? <ActivityIndicator color="#0f4fa8" /> : null}
       </View>
-    </ScreenShell>
+
+      {pendingInvites.length > 0 ? (
+        <View style={[styles.authCard, { marginTop: 16 }]}>
+          <Text style={styles.authHeading}>Club invitations</Text>
+          {pendingInvites.map((request) => (
+            <View key={request.inviteId} style={styles.inviteRow}>
+              <Text style={styles.memberName}>{request.clubName}</Text>
+              <View style={styles.rowActions}>
+                <AppButton
+                  label="Accept invitation"
+                  onPress={() => acceptMembershipRequest(request)}
+                  disabled={loading}
+                />
+                <AppButton
+                  label="Decline"
+                  onPress={() => declineInviteFromHome(request)}
+                  disabled={loading}
+                />
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </OnboardingShell>
   );
 }

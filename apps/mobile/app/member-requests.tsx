@@ -2,7 +2,7 @@ import { Text, View } from "react-native";
 import { styles } from "../src/styles";
 import { useClubOs } from "../src/ClubOsContext";
 import { AppButton } from "../src/components/AppButton";
-import { ScreenShell } from "../src/components/ScreenShell";
+import { OnboardingShell } from "../src/components/OnboardingShell";
 
 export default function MemberRequestsScreen() {
   const {
@@ -14,27 +14,17 @@ export default function MemberRequestsScreen() {
   } = useClubOs();
 
   return (
-    <ScreenShell showLoading>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>2. Membership requests</Text>
-        <Text style={styles.memberMeta}>
-          Review club invitations linked to your phone and choose where to
-          onboard.
-        </Text>
+    <OnboardingShell showLoading>
+      <View style={styles.authCard}>
+        <Text style={styles.authHeading}>Membership requests</Text>
         {loading && membershipRequests.length === 0 ? (
-          <Text style={styles.memberMeta}>Loading your invitations...</Text>
+          <Text style={styles.authSubtext}>Loading your invitations…</Text>
         ) : membershipRequests.length === 0 ? (
-          <Text style={styles.memberMeta}>
-            No pending membership requests found.
-          </Text>
+          <Text style={styles.authSubtext}>No pending requests.</Text>
         ) : (
           membershipRequests.map((request) => (
             <View key={request.inviteId} style={styles.inviteRow}>
               <Text style={styles.memberName}>{request.clubName}</Text>
-              <Text style={styles.memberMeta}>Status: {request.status}</Text>
-              <Text style={styles.memberMeta}>
-                Invite link: {request.inviteLink}
-              </Text>
               <View style={styles.rowActions}>
                 {request.status === "pending" ? (
                   <>
@@ -61,6 +51,6 @@ export default function MemberRequestsScreen() {
           ))
         )}
       </View>
-    </ScreenShell>
+    </OnboardingShell>
   );
 }

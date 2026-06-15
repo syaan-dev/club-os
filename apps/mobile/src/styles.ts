@@ -27,11 +27,6 @@ export const styles = StyleSheet.create({
     padding: 20,
     gap: 14,
   },
-  stepText: {
-    fontSize: 13,
-    color: colors.accent,
-    fontWeight: "600",
-  },
   errorText: {
     color: colors.red,
     fontWeight: "600",
@@ -39,16 +34,6 @@ export const styles = StyleSheet.create({
   infoText: {
     color: colors.accent,
     fontWeight: "600",
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: colors.textPrimary,
-  },
-  subtitle: {
-    color: colors.textSecondary,
-    fontSize: 14,
-    marginTop: -6,
   },
   card: {
     backgroundColor: colors.surface,

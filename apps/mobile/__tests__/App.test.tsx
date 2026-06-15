@@ -295,8 +295,6 @@ describe("App onboarding flows", () => {
     expect(await screen.findByText("Your clubs")).toBeTruthy();
     fireEvent.press(screen.getByText("Accept invitation"));
 
-    expect(
-      await screen.findByText("2. Join club and complete profile"),
-    ).toBeTruthy();
+    expect(await screen.findByText("Join the club")).toBeTruthy();
   });
 });

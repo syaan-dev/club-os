@@ -1,8 +1,8 @@
-import { ActivityIndicator, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 import { styles, colors } from "../src/styles";
 import { useClubOs } from "../src/ClubOsContext";
 import { AppButton } from "../src/components/AppButton";
-import { ScreenShell } from "../src/components/ScreenShell";
+import { OnboardingShell } from "../src/components/OnboardingShell";
 
 export default function ProfileSetupScreen() {
   const {
@@ -19,22 +19,21 @@ export default function ProfileSetupScreen() {
   } = useClubOs();
 
   return (
-    <ScreenShell>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>2. Complete your profile</Text>
-        <Text style={styles.memberMeta}>
-          New members need basic information before continuing.
-        </Text>
+    <OnboardingShell showLoading>
+      <View style={styles.authCard}>
+        <Text style={styles.authHeading}>Complete your profile</Text>
         <TextInput
           value={onboardName}
           onChangeText={setOnboardName}
           placeholder="Full name"
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
         />
         <TextInput
           value={onboardEmail}
           onChangeText={setOnboardEmail}
           placeholder="Email"
+          placeholderTextColor={colors.textMuted}
           keyboardType="email-address"
           autoCapitalize="none"
           style={styles.input}
@@ -42,13 +41,15 @@ export default function ProfileSetupScreen() {
         <TextInput
           value={onboardLocation}
           onChangeText={setOnboardLocation}
-          placeholder="Location / City (optional)"
+          placeholder="City (optional)"
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
         />
         <TextInput
           value={onboardSkills}
           onChangeText={setOnboardSkills}
-          placeholder="Skills / Interests (optional)"
+          placeholder="Skills or interests (optional)"
+          placeholderTextColor={colors.textMuted}
           style={styles.input}
         />
         <AppButton
@@ -56,8 +57,7 @@ export default function ProfileSetupScreen() {
           onPress={completeBasicProfile}
           disabled={loading || !onboardName.trim() || !onboardEmail.trim()}
         />
-        {loading ? <ActivityIndicator color={colors.accent} /> : null}
       </View>
-    </ScreenShell>
+    </OnboardingShell>
   );
 }
