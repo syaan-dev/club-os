@@ -3,6 +3,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -11,6 +12,7 @@ import * as Contacts from "expo-contacts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
+import { NotificationsApi, registerForPushNotifications } from "./push";
 import type {
   Announcement,
   ClubMeeting,
@@ -281,6 +283,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  // Expo push token registered for THIS device, retained so we can remove it on
+  // logout (otherwise the device would keep receiving the user's pushes).
+  const pushTokenRef = useRef<string | null>(null);
 
   // Single source of action feedback. Renders as an auto-dismissing toast at
   // the root. setErrorText/setInfoText are thin wrappers kept so the many
@@ -401,6 +406,64 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Register this device's Expo push token whenever a user is signed in, so the
+  // backend can deliver pushes (meetings, polls, dues) while the app is closed.
+  useEffect(() => {
+    const userId = session?.user?.id;
+    if (!userId) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const registration = await registerForPushNotifications();
+      if (cancelled || !registration) {
+        return;
+      }
+      pushTokenRef.current = registration.token;
+      try {
+        await supabase.from("device_push_tokens").upsert(
+          {
+            user_id: userId,
+            token: registration.token,
+            platform: registration.platform,
+          },
+          { onConflict: "token" },
+        );
+      } catch {
+        // Non-fatal: push delivery just won't reach this device.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id]);
+
+  // Route the user to the relevant tab when they tap a push notification.
+  useEffect(() => {
+    const subscription = NotificationsApi.addNotificationResponseReceivedListener(
+      (response) => {
+        const data = response.notification.request.content.data as {
+          type?: string;
+        };
+        switch (data?.type) {
+          case "meeting_scheduled":
+          case "poll_created":
+          case "announcement":
+            navigate("activity");
+            break;
+          case "dues_assigned":
+          case "dues_overdue":
+            navigate("economy");
+            break;
+          default:
+            break;
+        }
+      },
+    );
+    return () => subscription.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2421,6 +2484,19 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setInfoText("");
     setLoading(true);
 
+    // Unregister this device so it stops receiving the user's pushes.
+    if (pushTokenRef.current) {
+      try {
+        await supabase
+          .from("device_push_tokens")
+          .delete()
+          .eq("token", pushTokenRef.current);
+      } catch {
+        // Non-fatal.
+      }
+      pushTokenRef.current = null;
+    }
+
     const { error } = await supabase.auth.signOut();
     setLoading(false);
 
@@ -2565,7 +2641,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     });
 
     const mappedContacts: ContactOption[] = (contactsResult.data || [])
-      .map((contact: Contacts.Contact, index: number) => {
+      .map((contact, index) => {
         const phoneValue = contact.phoneNumbers?.[0]?.number ?? "";
         return {
           id: contact.id ?? `contact_${index}`,
@@ -2608,7 +2684,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
 
     const seen = new Set<string>();
     const mappedContacts: ContactOption[] = (contactsResult.data || [])
-      .map((contact: Contacts.Contact, index: number) => {
+      .map((contact, index) => {
         const phoneValue = contact.phoneNumbers?.[0]?.number ?? "";
         return {
           id: contact.id ?? `contact_${index}`,
