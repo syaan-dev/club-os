@@ -16,7 +16,11 @@ create-dues-cycle/   open a billing cycle (owner/treasurer)
 generate-member-dues/ bill active members via RPC (idempotent)
 record-transaction/  manual income/expense ledger entry
 dues-dashboard/      aggregated dues + ledger summary (read-only)
+send-push/      deliver a notification to Expo push tokens (system-to-system)
 ```
+
+Push notifications (Expo + FCM/APNs) setup, EAS project id, and how to trigger
+a notification: [`send-push/README.md`](./send-push/README.md).
 
 Each function is a `Deno.serve(handlePost(...))` handler that runs under the
 **caller's JWT**, so Row Level Security applies. Mutations validate input via

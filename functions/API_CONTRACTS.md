@@ -171,7 +171,58 @@ Read-only aggregated dues + ledger summary. Any active club member may call it.
 
 ---
 
+## 10. `send-push` (system-to-system)
+
+Delivers one notification to a recipient's registered Expo push tokens so it
+reaches the device while the app is backgrounded/closed. **Not called with a
+user JWT** — it is invoked by the database dispatch trigger
+(`dispatch_push_notification`) when a `notifications` row is inserted.
+
+- **Auth:** shared secret in `Authorization: Bearer <PUSH_WEBHOOK_SECRET>`
+  (same value configured on the DB via `app.settings.push_webhook_secret`).
+  Deploy with `--no-verify-jwt`.
+- **Internals:** uses a **service-role** client to resolve the recipient member
+  → `auth.users.id`, read `device_push_tokens`, POST to Expo
+  (`https://exp.host/--/api/v2/push/send`), and delete tokens Expo reports as
+  `DeviceNotRegistered`.
+
+**Request** (mirrors a Supabase DB webhook payload)
+```json
+{
+  "record": {
+    "id": "<uuid>",
+    "club_id": "<uuid>",
+    "recipient_member_id": "<uuid>",
+    "type": "meeting_scheduled",
+    "title": "New meeting scheduled",
+    "body": "AGM 2026",
+    "data": { "meetingId": "<uuid>" }
+  }
+}
+```
+**Response `200`**
+```json
+{ "sent": 1, "invalidated": 0 }
+```
+Errors: `401` (bad/missing secret), `422` (missing record), `502` (Expo request
+failed).
+
+### Required environment / configuration
+
+- Function env: `PUSH_WEBHOOK_SECRET`, plus the auto-provided `SUPABASE_URL` and
+  `SUPABASE_SERVICE_ROLE_KEY`.
+- Database (once): `alter database postgres set app.settings.edge_url =
+  'https://<ref>.supabase.co';` and `alter database postgres set
+  app.settings.push_webhook_secret = '<same secret>';`
+- Mobile credentials: **Android** needs a Firebase `google-services.json`
+  uploaded to EAS (referenced by `android.googleServicesFile`); **iOS** needs an
+  APNs key + paid Apple Developer account managed via EAS credentials. Set
+  `expo.extra.eas.projectId` in `app.json` (currently a placeholder).
+
+---
+
 ## Local development
+
 
 ```bash
 # From repo root — serve all functions (JWT verification disabled for local curl):

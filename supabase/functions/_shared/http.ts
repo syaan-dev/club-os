@@ -34,6 +34,18 @@ export function getClientForRequest(req: Request): SupabaseClient {
   });
 }
 
+// Builds a SERVICE-ROLE client that bypasses RLS. Use ONLY in system-to-system
+// functions that are not invoked with a caller JWT (e.g. send-push, called by
+// the database dispatch trigger). Never expose its results directly to a user.
+export function getServiceClient(): SupabaseClient {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
+  return createClient(supabaseUrl, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 export async function getAuthedUser(client: SupabaseClient) {
   const { data, error } = await client.auth.getUser();
   if (error || !data.user) {

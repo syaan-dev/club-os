@@ -21,6 +21,10 @@ holds the Node-based tooling wrapper (`package.json`) and the API documentation.
 | `generate-member-dues` | owner/treasurer | Bill all active members (idempotent) |
 | `record-transaction` | owner/treasurer | Manual income/expense ledger entry |
 | `dues-dashboard` | any active member | Aggregated dues + ledger summary |
+| `send-push` | shared secret (system) | Deliver a notification to a recipient's Expo push tokens |
+
+Push setup (EAS project id, FCM/APNs credentials) and how to trigger a
+notification: [`../supabase/functions/send-push/README.md`](../supabase/functions/send-push/README.md).
 
 Full request/response/error contracts: [`API_CONTRACTS.md`](./API_CONTRACTS.md).
 
