@@ -19,14 +19,38 @@ module.exports = () => {
   if (process.env.GOOGLE_SERVICES_JSON) {
     const b64 = process.env.GOOGLE_SERVICES_JSON;
     console.log(`[app.config] GOOGLE_SERVICES_JSON env var length: ${b64.length}`);
+    console.log(`[app.config] First 50 chars of base64: ${b64.substring(0, 50)}`);
 
     try {
+      // Decode base64 to UTF-8 string
       const json = Buffer.from(b64, 'base64').toString('utf8');
+      console.log(`[app.config] Decoded JSON length: ${json.length}`);
+      console.log(`[app.config] First 100 chars of JSON: ${json.substring(0, 100)}`);
+
+      // Validate it's valid JSON before writing
+      try {
+        JSON.parse(json);
+        console.log('[app.config] ✓ JSON is valid');
+      } catch (parseErr) {
+        console.error('[app.config] ✗ Decoded content is not valid JSON:', parseErr.message);
+        console.error('[app.config] First 200 chars:', json.substring(0, 200));
+      }
+
+      // Write to file
       fs.writeFileSync(dest, json, { encoding: 'utf8' });
-      console.log('[app.config] ✓ Wrote google-services.json from EAS env var (base64 decoded).');
-      fileCreated = true;
+      console.log('[app.config] ✓ Wrote google-services.json');
+
+      // Verify file was created and is readable
+      if (fs.existsSync(dest)) {
+        const fileSize = fs.statSync(dest).size;
+        console.log(`[app.config] ✓ File exists, size: ${fileSize} bytes`);
+        fileCreated = true;
+      } else {
+        console.error('[app.config] ✗ File does not exist after write');
+      }
     } catch (err) {
       console.error('[app.config] ✗ Failed to decode/write google-services.json:', err.message);
+      console.error('[app.config] Stack:', err.stack);
     }
   } else {
     console.warn('[app.config] ⚠ GOOGLE_SERVICES_JSON env var not found.');
