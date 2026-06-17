@@ -13,7 +13,6 @@
     "android": {
       "package": "com.syaan.clubos",
       "versionCode": 1,
-      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#ffffff"
       }
