@@ -19,6 +19,7 @@ module.exports = () => {
       scheme: 'clubos',
       orientation: 'portrait',
       userInterfaceStyle: 'light',
+      icon: './assets/icon.png',
       ios: {
         supportsTablet: true,
         bundleIdentifier: 'com.syaan.clubos',
@@ -27,6 +28,7 @@ module.exports = () => {
         package: 'com.syaan.clubos',
         versionCode: 1,
         adaptiveIcon: {
+          foregroundImage: './assets/adaptive-icon.png',
           backgroundColor: '#ffffff',
         },
         googleServicesFile,
@@ -41,6 +43,8 @@ module.exports = () => {
         [
           'expo-splash-screen',
           {
+            image: './assets/splash-icon.png',
+            imageWidth: 200,
             resizeMode: 'contain',
             backgroundColor: '#ffffff',
           },
