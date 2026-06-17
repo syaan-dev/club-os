@@ -37,6 +37,8 @@ expo-env.d.ts
 # Native build artifacts
 apps/mobile/android/
 apps/mobile/ios/
+apps/mobile/google-services.json
+apps/mobile/club-os-firebase-adminsdk-fbsvc.json
 *.hprof
 
 # Metro

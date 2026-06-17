@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Club OS",
-    "slug": "club-os-mobile",
+    "slug": "club-os",
     "version": "1.0.0",
     "scheme": "clubos",
     "orientation": "portrait",
@@ -44,8 +44,10 @@
     },
     "extra": {
       "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
-      }
-    }
+        "projectId": "36b467e0-4867-4cd9-b2fb-57d0e7b599a1"
+      },
+      "router": {}
+    },
+    "owner": "syaan.dev"
   }
 }

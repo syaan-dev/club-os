@@ -309,11 +309,16 @@ exception
 end;
 $$;
 
--- Configure these (once) so the trigger can reach the Edge Function:
---   alter database postgres set app.settings.edge_url = 'https://<ref>.supabase.co';
---   alter database postgres set app.settings.push_webhook_secret = '<PUSH_WEBHOOK_SECRET>';
+-- Configure these (once) so the trigger can reach the Edge Function. Hosted
+-- Supabase denies setting custom app.settings.* GUCs (ERROR 42501: permission
+-- denied) for both ALTER DATABASE and ALTER ROLE, so we store config in
+-- Supabase Vault instead. Run once in the SQL editor:
+--   select vault.create_secret('https://<ref>.supabase.co', 'edge_url');
+--   select vault.create_secret('<PUSH_WEBHOOK_SECRET>', 'push_webhook_secret');
 -- The same secret must be set as the PUSH_WEBHOOK_SECRET env var on the
--- send-push function. When edge_url is unset (local/test), dispatch no-ops.
+-- send-push function. When edge_url is absent (local/test), dispatch no-ops.
+-- To rotate a value, delete then recreate:
+--   delete from vault.secrets where name = 'edge_url';
 create or replace function public.dispatch_push_notification()
 returns trigger
 language plpgsql
@@ -321,9 +326,14 @@ security definer
 set search_path = public
 as $$
 declare
-  _edge_url text := current_setting('app.settings.edge_url', true);
-  _secret text := current_setting('app.settings.push_webhook_secret', true);
+  _edge_url text;
+  _secret text;
 begin
+  select decrypted_secret into _edge_url
+    from vault.decrypted_secrets where name = 'edge_url';
+  select decrypted_secret into _secret
+    from vault.decrypted_secrets where name = 'push_webhook_secret';
+
   if _edge_url is null or _edge_url = '' then
     return new; -- dispatch not configured; in-app notification still stored
   end if;

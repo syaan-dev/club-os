@@ -211,9 +211,12 @@ failed).
 
 - Function env: `PUSH_WEBHOOK_SECRET`, plus the auto-provided `SUPABASE_URL` and
   `SUPABASE_SERVICE_ROLE_KEY`.
-- Database (once): `alter database postgres set app.settings.edge_url =
-  'https://<ref>.supabase.co';` and `alter database postgres set
-  app.settings.push_webhook_secret = '<same secret>';`
+- Database (once): hosted Supabase denies custom `app.settings.*` GUCs (ERROR
+  42501) for both `alter database` and `alter role`, so store config in
+  **Supabase Vault**: `select vault.create_secret('https://<ref>.supabase.co',
+  'edge_url');` and `select vault.create_secret('<same secret>',
+  'push_webhook_secret');`. The dispatch trigger reads them via
+  `vault.decrypted_secrets`.
 - Mobile credentials: **Android** needs a Firebase `google-services.json`
   uploaded to EAS (referenced by `android.googleServicesFile`); **iOS** needs an
   APNs key + paid Apple Developer account managed via EAS credentials. Set

@@ -126,15 +126,18 @@ the push automatically. Below are the ways to trigger one, simplest first.
 
 1. A device that registered a token (signed in on a real build → row in
    `device_push_tokens`).
-2. Function env `PUSH_WEBHOOK_SECRET` set, and the database configured:
+2. Function env `PUSH_WEBHOOK_SECRET` set, and the database configured. Hosted
+   Supabase denies custom `app.settings.*` GUCs (ERROR 42501) for both `alter
+   database` and `alter role`, so config lives in **Supabase Vault**. Run once
+   in the SQL editor:
    ```sql
-   alter database postgres
-     set app.settings.edge_url = 'https://<your-ref>.supabase.co';
-   alter database postgres
-     set app.settings.push_webhook_secret = '<same-secret-as-PUSH_WEBHOOK_SECRET>';
+   select vault.create_secret('https://<your-ref>.supabase.co', 'edge_url');
+   select vault.create_secret('<same-secret-as-PUSH_WEBHOOK_SECRET>', 'push_webhook_secret');
    ```
-   When `edge_url` is unset (local/dev), the in-app notification is still stored
-   but no push is dispatched.
+   The dispatch trigger reads these via `vault.decrypted_secrets`, so no session
+   reconnect is needed. To rotate, `delete from vault.secrets where name = '...'`
+   then recreate. When `edge_url` is absent (local/dev), the in-app notification
+   is still stored but no push is dispatched.
 
 ### A. The natural path — create an activity (fires triggers)
 
