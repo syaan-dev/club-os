@@ -1,30 +1,14 @@
-const fs = require('fs');
-const path = require('path');
-
-// This config helper writes google-services.json at build time from an EAS secret.
-// EAS injects file secrets as base64-encoded environment variables.
-// We decode and write the file so the Android config plugin can find it.
+// This config resolves the google-services.json path at build time.
+// For EAS file-type secrets, EAS decodes the file and writes it to disk,
+// then exposes the env var as the PATH to that file (not base64 content).
+// Locally, we fall back to the file in the project root.
 module.exports = () => {
-  const projectRoot = __dirname;
-  const dest = path.join(projectRoot, 'google-services.json');
+  // EAS sets this env var to the path of the decoded secret file.
+  // Locally it is unset, so we use the local file path.
+  const googleServicesFile =
+    process.env.GOOGLE_SERVICES_JSON || './google-services.json';
 
-  console.log('[app.config] Setting up google-services.json...');
-
-  // Try to write google-services.json from EAS secret (base64 encoded)
-  if (process.env.GOOGLE_SERVICES_JSON_V1) {
-    try {
-      const b64 = process.env.GOOGLE_SERVICES_JSON_V1;
-      const json = Buffer.from(b64, 'base64').toString('utf8');
-
-      // Validate JSON before writing
-      JSON.parse(json);
-
-      fs.writeFileSync(dest, json, { encoding: 'utf8' });
-      console.log('[app.config] ✓ google-services.json written');
-    } catch (err) {
-      console.error('[app.config] ✗ Failed to write google-services.json:', err.message);
-    }
-  }
+  console.log(`[app.config] googleServicesFile: ${googleServicesFile}`);
 
   // Build the config object.
   const config = {
@@ -45,8 +29,7 @@ module.exports = () => {
         adaptiveIcon: {
           backgroundColor: '#ffffff',
         },
-        // Use the file if it was created, otherwise fallback to local path
-        googleServicesFile: './google-services.json',
+        googleServicesFile,
       },
       web: {
         bundler: 'metro',
