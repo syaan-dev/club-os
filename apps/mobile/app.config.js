@@ -36,15 +36,62 @@ module.exports = () => {
     console.warn('[app.config] ⚠ google-services.json was NOT created; build may fail.');
   }
 
-  // Load base config from app.json and add googleServicesFile dynamically.
-  // eslint-disable-next-line import/no-dynamic-require,global-require
-  const config = require('./app.json');
+  // Build the config object. This is the source of truth (no app.json).
+  const config = {
+    expo: {
+      name: 'Club OS',
+      slug: 'club-os',
+      version: '1.0.0',
+      scheme: 'clubos',
+      orientation: 'portrait',
+      userInterfaceStyle: 'light',
+      ios: {
+        supportsTablet: true,
+        bundleIdentifier: 'com.syaan.clubos',
+      },
+      android: {
+        package: 'com.syaan.clubos',
+        versionCode: 1,
+        adaptiveIcon: {
+          backgroundColor: '#ffffff',
+        },
+      },
+      web: {
+        bundler: 'metro',
+        output: 'single',
+      },
+      plugins: [
+        'expo-asset',
+        'expo-router',
+        [
+          'expo-splash-screen',
+          {
+            resizeMode: 'contain',
+            backgroundColor: '#ffffff',
+          },
+        ],
+        [
+          'expo-notifications',
+          {
+            color: '#3a6ff7',
+          },
+        ],
+      ],
+      experiments: {
+        typedRoutes: true,
+      },
+      extra: {
+        eas: {
+          projectId: '36b467e0-4867-4cd9-b2fb-57d0e7b599a1',
+        },
+        router: {},
+      },
+      owner: 'syaan.dev',
+    },
+  };
 
-  // Only set googleServicesFile if the file was successfully created.
+  // Conditionally add googleServicesFile only if file was successfully created.
   if (fileCreated) {
-    if (!config.expo.android) {
-      config.expo.android = {};
-    }
     config.expo.android.googleServicesFile = './google-services.json';
     console.log('[app.config] googleServicesFile set in config.');
   } else {
