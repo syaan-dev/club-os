@@ -751,6 +751,29 @@ export const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginBottom: -4,
   },
+  emailStatusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: -2,
+  },
+  emailStatusVerified: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.green,
+  },
+  emailStatusPending: {
+    fontSize: 13,
+    color: colors.textMuted,
+    flexShrink: 1,
+  },
+  emailStatusAction: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.accent,
+  },
   sheetMemberRow: {
     paddingVertical: 12,
     borderBottomWidth: 1,

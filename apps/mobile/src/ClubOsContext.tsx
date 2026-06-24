@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useRouter } from "expo-router";
 import * as Contacts from "expo-contacts";
+import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
 import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -38,6 +39,17 @@ import type {
 import { canManageFinances, deriveDuesSummary } from "./dues";
 
 const ACTIVE_CLUB_KEY = "clubos.activeClub";
+
+// Where Supabase sends the user after they click the email-confirmation link.
+// Deep-links back into the app via the `clubos://` scheme. Wrapped in try/catch
+// because Linking.createURL can throw under the Jest test runner.
+function emailRedirectUrl(): string | undefined {
+  try {
+    return Linking.createURL("verify-email");
+  } catch {
+    return undefined;
+  }
+}
 
 export type ToastKind = "success" | "error" | "info";
 
@@ -119,6 +131,9 @@ type ClubOsContextValue = {
   onboardAvatarUrl: string;
   uploadingAvatar: boolean;
   pickAndUploadAvatar: () => Promise<void>;
+  emailVerified: boolean;
+  emailPending: boolean;
+  resendEmailVerification: () => Promise<void>;
   clubLogoUrl: string;
   uploadingClubLogo: boolean;
   pickAndUploadClubLogo: () => Promise<void>;
@@ -2000,16 +2015,22 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({
-      data: {
-        full_name: trimmedName,
-        member_email: trimmedEmail,
-        location: onboardLocation.trim() || null,
-        skills: onboardSkills.trim() || null,
-        avatar_url: onboardAvatarUrl || null,
-        terms_accepted_at: new Date().toISOString(),
+    const needsEmailVerify =
+      trimmedEmail !== (session?.user?.email ?? "").toLowerCase();
+    const { error } = await supabase.auth.updateUser(
+      {
+        ...(needsEmailVerify ? { email: trimmedEmail } : {}),
+        data: {
+          full_name: trimmedName,
+          member_email: trimmedEmail,
+          location: onboardLocation.trim() || null,
+          skills: onboardSkills.trim() || null,
+          avatar_url: onboardAvatarUrl || null,
+          terms_accepted_at: new Date().toISOString(),
+        },
       },
-    });
+      needsEmailVerify ? { emailRedirectTo: emailRedirectUrl() } : undefined,
+    );
     setLoading(false);
 
     if (error) {
@@ -2017,7 +2038,11 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    setInfoText("Profile saved successfully.");
+    setInfoText(
+      needsEmailVerify
+        ? `Profile saved. We sent a verification link to ${trimmedEmail}.`
+        : "Profile saved successfully.",
+    );
     if (postProfileNextScreen === "home") {
       await loadHomeData();
     }
@@ -2073,21 +2098,27 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    await supabase.auth.updateUser({
-      data: {
-        full_name: trimmedName,
-        member_email: trimmedEmail,
-        location: onboardLocation.trim() || null,
-        skills: onboardSkills.trim() || null,
-        avatar_url: onboardAvatarUrl || null,
-        terms_accepted_at: new Date().toISOString(),
+    await supabase.auth.updateUser(
+      {
+        email: trimmedEmail,
+        data: {
+          full_name: trimmedName,
+          member_email: trimmedEmail,
+          location: onboardLocation.trim() || null,
+          skills: onboardSkills.trim() || null,
+          avatar_url: onboardAvatarUrl || null,
+          terms_accepted_at: new Date().toISOString(),
+        },
       },
-    });
+      { emailRedirectTo: emailRedirectUrl() },
+    );
 
     setClubId(pendingClubId);
     await Promise.all([loadMembers(pendingClubId), loadInvites(pendingClubId)]);
     setLoading(false);
-    setInfoText("Welcome aboard. Your member profile is now active.");
+    setInfoText(
+      `Welcome aboard. We sent a verification link to ${trimmedEmail}.`,
+    );
     navigate("members");
   };
 
@@ -2551,6 +2582,12 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   // Refreshes the editable profile fields from the logged-in account so the
   // Setup "Your profile" sheet always shows current values.
   const loadMyProfile = async () => {
+    // Pull a fresh session so `email_confirmed_at` reflects any confirmation
+    // the member just completed via the emailed link.
+    const { data: refreshed } = await supabase.auth.refreshSession();
+    if (refreshed?.session) {
+      setSession(refreshed.session);
+    }
     const {
       data: { user },
     } = await supabase.auth.getUser();
@@ -2699,15 +2736,21 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({
-      data: {
-        full_name: trimmedName,
-        member_email: trimmedEmail,
-        location: onboardLocation.trim() || null,
-        skills: onboardSkills.trim() || null,
-        avatar_url: onboardAvatarUrl || null,
+    const needsEmailVerify =
+      trimmedEmail !== (session?.user?.email ?? "").toLowerCase();
+    const { error } = await supabase.auth.updateUser(
+      {
+        ...(needsEmailVerify ? { email: trimmedEmail } : {}),
+        data: {
+          full_name: trimmedName,
+          member_email: trimmedEmail,
+          location: onboardLocation.trim() || null,
+          skills: onboardSkills.trim() || null,
+          avatar_url: onboardAvatarUrl || null,
+        },
       },
-    });
+      needsEmailVerify ? { emailRedirectTo: emailRedirectUrl() } : undefined,
+    );
 
     if (error) {
       setLoading(false);
@@ -2735,7 +2778,37 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     }
 
     setLoading(false);
-    setInfoText("Profile updated.");
+    setInfoText(
+      needsEmailVerify
+        ? `Profile updated. We sent a verification link to ${trimmedEmail}.`
+        : "Profile updated.",
+    );
+  };
+
+  // Re-sends the email-confirmation link for the address currently on file so
+  // the member can prove ownership. Re-issuing the email change via updateUser
+  // triggers Supabase to deliver a fresh confirmation link.
+  const resendEmailVerification = async () => {
+    setErrorText("");
+    setInfoText("");
+    const trimmedEmail = onboardEmail.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setErrorText("Add an email address first.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.auth.updateUser(
+      { email: trimmedEmail },
+      { emailRedirectTo: emailRedirectUrl() },
+    );
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+    setInfoText(`Verification link sent to ${trimmedEmail}.`);
   };
 
   const leaveClub = async () => {
@@ -2813,6 +2886,19 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const collectionPercent = duesSummary.collectionPercent;
   const canManageDues = canManageFinances(currentRole);
   const canManageActivities = isLeadership(currentRole);
+
+  // Email-verification state derived from the auth session. An email counts as
+  // verified once Supabase confirms ownership (`email_confirmed_at` set) and the
+  // confirmed address matches what the member is showing in their profile form.
+  const sessionUser = session?.user ?? null;
+  const verifiedEmail = sessionUser?.email ?? "";
+  const pendingEmail =
+    typeof sessionUser?.new_email === "string" ? sessionUser.new_email : "";
+  const emailVerified =
+    verifiedEmail.length > 0 &&
+    Boolean(sessionUser?.email_confirmed_at) &&
+    verifiedEmail.toLowerCase() === onboardEmail.trim().toLowerCase();
+  const emailPending = pendingEmail.length > 0;
 
   const inviteMember = async () => {
     setErrorText("");
@@ -3233,6 +3319,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     updateClubProfile,
     updateMemberRole,
     saveProfile,
+    resendEmailVerification,
+    emailVerified,
+    emailPending,
     leaveClub,
     logout,
   };

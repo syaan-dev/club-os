@@ -67,6 +67,9 @@ export default function SetupScreen() {
     loadMyProfile,
     updateClubProfile,
     saveProfile,
+    resendEmailVerification,
+    emailVerified,
+    emailPending,
     leaveClub,
     logout,
     loading,
@@ -278,6 +281,31 @@ export default function SetupScreen() {
               autoCapitalize="none"
               style={styles.input}
             />
+            {onboardEmail.trim().length > 0 ? (
+              emailVerified ? (
+                <View style={styles.emailStatusRow}>
+                  <Text style={styles.emailStatusVerified}>✓ Email verified</Text>
+                </View>
+              ) : (
+                <View style={styles.emailStatusRow}>
+                  <Text style={styles.emailStatusPending}>
+                    {emailPending
+                      ? "Verification pending — check your inbox."
+                      : "Email not verified yet."}
+                  </Text>
+                  <Pressable
+                    onPress={resendEmailVerification}
+                    disabled={loading}
+                    accessibilityRole="button"
+                    accessibilityLabel="Resend verification email"
+                  >
+                    <Text style={styles.emailStatusAction}>
+                      Resend link
+                    </Text>
+                  </Pressable>
+                </View>
+              )
+            ) : null}
             <Text style={styles.sheetLabel}>Location (optional)</Text>
             <TextInput
               value={onboardLocation}
