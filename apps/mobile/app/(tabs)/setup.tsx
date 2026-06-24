@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { styles } from "../../src/styles";
 import { useClubOs } from "../../src/ClubOsContext";
 import { AppButton } from "../../src/components/AppButton";
@@ -45,10 +53,16 @@ export default function SetupScreen() {
     setOnboardLocation,
     onboardSkills,
     setOnboardSkills,
+    onboardAvatarUrl,
+    uploadingAvatar,
+    pickAndUploadAvatar,
     clubName,
     setClubName,
     clubDescription,
     setClubDescription,
+    clubLogoUrl,
+    uploadingClubLogo,
+    pickAndUploadClubLogo,
     loadClubProfile,
     loadMyProfile,
     updateClubProfile,
@@ -156,6 +170,31 @@ export default function SetupScreen() {
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Club profile</Text>
+            <Pressable
+              style={styles.avatarPicker}
+              onPress={pickAndUploadClubLogo}
+              disabled={uploadingClubLogo}
+              accessibilityRole="button"
+              accessibilityLabel="Change club logo"
+            >
+              <View style={styles.avatarPickerCircle}>
+                {clubLogoUrl ? (
+                  <Image
+                    source={{ uri: clubLogoUrl }}
+                    style={styles.avatarPickerImage}
+                  />
+                ) : (
+                  <Text style={styles.avatarPickerGlyph}>＋</Text>
+                )}
+              </View>
+              <Text style={styles.avatarPickerHint}>
+                {uploadingClubLogo
+                  ? "Uploading…"
+                  : clubLogoUrl
+                    ? "Change logo"
+                    : "Add logo"}
+              </Text>
+            </Pressable>
             <Text style={styles.sheetLabel}>Club name</Text>
             <TextInput
               value={clubName}
@@ -196,6 +235,31 @@ export default function SetupScreen() {
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Your profile</Text>
+            <Pressable
+              style={styles.avatarPicker}
+              onPress={pickAndUploadAvatar}
+              disabled={uploadingAvatar}
+              accessibilityRole="button"
+              accessibilityLabel="Change your profile photo"
+            >
+              <View style={styles.avatarPickerCircle}>
+                {onboardAvatarUrl ? (
+                  <Image
+                    source={{ uri: onboardAvatarUrl }}
+                    style={styles.avatarPickerImage}
+                  />
+                ) : (
+                  <Text style={styles.avatarPickerGlyph}>＋</Text>
+                )}
+              </View>
+              <Text style={styles.avatarPickerHint}>
+                {uploadingAvatar
+                  ? "Uploading…"
+                  : onboardAvatarUrl
+                    ? "Change photo"
+                    : "Add photo"}
+              </Text>
+            </Pressable>
             <Text style={styles.sheetLabel}>Name</Text>
             <TextInput
               value={onboardName}

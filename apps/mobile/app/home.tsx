@@ -1,4 +1,4 @@
-import { Pressable, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 import { styles } from "../src/styles";
 import { useClubOs } from "../src/ClubOsContext";
 import { AppButton } from "../src/components/AppButton";
@@ -36,6 +36,18 @@ export default function HomeScreen() {
               onPress={() => openClub(club.clubId, club.name)}
               disabled={loading}
             >
+              <View style={styles.clubRowLogo}>
+                {club.logoUrl ? (
+                  <Image
+                    source={{ uri: club.logoUrl }}
+                    style={styles.clubRowLogoImage}
+                  />
+                ) : (
+                  <Text style={styles.clubRowLogoText}>
+                    {club.name.charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </View>
               <View style={styles.clubRowText}>
                 <Text style={styles.memberName}>{club.name}</Text>
                 <Text style={styles.memberMeta}>{club.role}</Text>

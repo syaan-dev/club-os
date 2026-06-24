@@ -1,4 +1,5 @@
-import { Text, TextInput, View } from "react-native";
+import { useState } from "react";
+import { Image, Pressable, Text, TextInput, View } from "react-native";
 import { styles, colors } from "../src/styles";
 import { useClubOs } from "../src/ClubOsContext";
 import { AppButton } from "../src/components/AppButton";
@@ -15,9 +16,14 @@ export default function MemberProfileScreen() {
     setOnboardLocation,
     onboardSkills,
     setOnboardSkills,
+    onboardAvatarUrl,
+    uploadingAvatar,
+    pickAndUploadAvatar,
     loading,
     completeMemberOnboarding,
   } = useClubOs();
+
+  const [agreed, setAgreed] = useState(false);
 
   return (
     <OnboardingShell showLoading>
@@ -27,6 +33,31 @@ export default function MemberProfileScreen() {
           Invited to {pendingClubName || "your club"} — complete your profile to
           continue.
         </Text>
+        <Pressable
+          style={styles.avatarPicker}
+          onPress={pickAndUploadAvatar}
+          disabled={uploadingAvatar}
+          accessibilityRole="button"
+          accessibilityLabel="Add a profile photo"
+        >
+          <View style={styles.avatarPickerCircle}>
+            {onboardAvatarUrl ? (
+              <Image
+                source={{ uri: onboardAvatarUrl }}
+                style={styles.avatarPickerImage}
+              />
+            ) : (
+              <Text style={styles.avatarPickerGlyph}>＋</Text>
+            )}
+          </View>
+          <Text style={styles.avatarPickerHint}>
+            {uploadingAvatar
+              ? "Uploading…"
+              : onboardAvatarUrl
+                ? "Change photo"
+                : "Add photo"}
+          </Text>
+        </Pressable>
         <TextInput
           value={onboardName}
           onChangeText={setOnboardName}
@@ -57,10 +88,27 @@ export default function MemberProfileScreen() {
           placeholderTextColor={colors.textMuted}
           style={styles.input}
         />
+        <Pressable
+          style={styles.consentRow}
+          onPress={() => setAgreed((prev) => !prev)}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: agreed }}
+          accessibilityLabel="Agree to terms and privacy policy"
+        >
+          <View style={[styles.consentBox, agreed && styles.consentBoxChecked]}>
+            {agreed ? <Text style={styles.consentTick}>✓</Text> : null}
+          </View>
+          <Text style={styles.consentText}>
+            I agree to the <Text style={styles.consentLink}>Terms</Text> and{" "}
+            <Text style={styles.consentLink}>Privacy Policy</Text>.
+          </Text>
+        </Pressable>
         <AppButton
           label="Complete onboarding"
           onPress={completeMemberOnboarding}
-          disabled={loading || !onboardName.trim() || !onboardEmail.trim()}
+          disabled={
+            loading || !agreed || !onboardName.trim() || !onboardEmail.trim()
+          }
         />
       </View>
     </OnboardingShell>

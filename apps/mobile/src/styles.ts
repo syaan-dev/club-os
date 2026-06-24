@@ -107,6 +107,25 @@ export const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 12,
   },
+  clubRowLogo: {
+    width: 36,
+    height: 36,
+    borderRadius: 9,
+    marginRight: 10,
+    backgroundColor: colors.brand,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  clubRowLogoImage: {
+    width: 36,
+    height: 36,
+  },
+  clubRowLogoText: {
+    color: "#ffffff",
+    fontWeight: "700",
+    fontSize: 14,
+  },
   clubRowText: {
     flex: 1,
     paddingRight: 8,
@@ -334,6 +353,11 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.brand,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarImage: {
+    width: 40,
+    height: 40,
   },
   avatarText: {
     color: "#ffffff",
@@ -475,17 +499,29 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.surfaceAlt,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  memberAvatarImage: {
+    width: 40,
+    height: 40,
   },
   memberAvatarText: {
     color: colors.textSecondary,
     fontWeight: "700",
     fontSize: 13,
   },
-  directoryName: {
+  directoryNameCol: {
     flex: 1,
+    gap: 2,
+  },
+  directoryName: {
     fontSize: 16,
     fontWeight: "600",
     color: colors.textPrimary,
+  },
+  directoryMeta: {
+    fontSize: 13,
+    color: colors.textMuted,
   },
   roleChip: {
     borderRadius: 999,
@@ -892,5 +928,69 @@ export const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 24,
     lineHeight: 18,
+  },
+  avatarPicker: {
+    alignSelf: "center",
+    alignItems: "center",
+    gap: 6,
+  },
+  avatarPickerCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  avatarPickerImage: {
+    width: 88,
+    height: 88,
+  },
+  avatarPickerGlyph: {
+    fontSize: 30,
+    color: colors.textMuted,
+  },
+  avatarPickerHint: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.accent,
+  },
+  consentRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+  },
+  consentBox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+  },
+  consentBoxChecked: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  consentTick: {
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  consentText: {
+    flex: 1,
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 19,
+  },
+  consentLink: {
+    color: colors.accent,
+    fontWeight: "600",
   },
 });

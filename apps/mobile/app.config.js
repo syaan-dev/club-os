@@ -56,6 +56,13 @@ module.exports = () => {
           },
         ],
         "expo-web-browser",
+        [
+          "expo-image-picker",
+          {
+            photosPermission:
+              "Allow Club OS to access your photos to set a profile picture.",
+          },
+        ],
       ],
       experiments: {
         typedRoutes: true,

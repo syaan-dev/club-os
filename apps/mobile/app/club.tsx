@@ -1,4 +1,4 @@
-import { Text, TextInput, View } from "react-native";
+import { Image, Pressable, Text, TextInput, View } from "react-native";
 import { styles, colors } from "../src/styles";
 import { useClubOs } from "../src/ClubOsContext";
 import { AppButton } from "../src/components/AppButton";
@@ -10,6 +10,9 @@ export default function ClubScreen() {
     setClubName,
     clubDescription,
     setClubDescription,
+    clubLogoUrl,
+    uploadingClubLogo,
+    pickAndUploadClubLogo,
     loading,
     createClub,
   } = useClubOs();
@@ -18,6 +21,31 @@ export default function ClubScreen() {
     <OnboardingShell showLoading>
       <View style={styles.authCard}>
         <Text style={styles.authHeading}>Create a club</Text>
+        <Pressable
+          style={styles.avatarPicker}
+          onPress={pickAndUploadClubLogo}
+          disabled={uploadingClubLogo}
+          accessibilityRole="button"
+          accessibilityLabel="Add a club logo"
+        >
+          <View style={styles.avatarPickerCircle}>
+            {clubLogoUrl ? (
+              <Image
+                source={{ uri: clubLogoUrl }}
+                style={styles.avatarPickerImage}
+              />
+            ) : (
+              <Text style={styles.avatarPickerGlyph}>＋</Text>
+            )}
+          </View>
+          <Text style={styles.avatarPickerHint}>
+            {uploadingClubLogo
+              ? "Uploading…"
+              : clubLogoUrl
+                ? "Change logo"
+                : "Add logo"}
+          </Text>
+        </Pressable>
         <Text style={styles.inputLabel}>Club name</Text>
         <TextInput
           value={clubName}

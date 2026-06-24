@@ -10,6 +10,7 @@ import {
 import { useRouter } from "expo-router";
 import * as Contacts from "expo-contacts";
 import * as WebBrowser from "expo-web-browser";
+import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
@@ -115,6 +116,12 @@ type ClubOsContextValue = {
   setOnboardLocation: (value: string) => void;
   onboardSkills: string;
   setOnboardSkills: (value: string) => void;
+  onboardAvatarUrl: string;
+  uploadingAvatar: boolean;
+  pickAndUploadAvatar: () => Promise<void>;
+  clubLogoUrl: string;
+  uploadingClubLogo: boolean;
+  pickAndUploadClubLogo: () => Promise<void>;
   loading: boolean;
   toast: ToastMessage | null;
   notify: (message: string, kind?: ToastKind) => void;
@@ -283,6 +290,10 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const [onboardEmail, setOnboardEmail] = useState("");
   const [onboardLocation, setOnboardLocation] = useState("");
   const [onboardSkills, setOnboardSkills] = useState("");
+  const [onboardAvatarUrl, setOnboardAvatarUrl] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [clubLogoUrl, setClubLogoUrl] = useState("");
+  const [uploadingClubLogo, setUploadingClubLogo] = useState(false);
   const [postProfileNextScreen, setPostProfileNextScreen] = useState<
     "club" | "members" | "home"
   >("club");
@@ -358,6 +369,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setPhone("");
     setClubName("");
     setClubDescription("");
+    setClubLogoUrl("");
     setMembers([]);
     setCurrentRole("");
     setInvites([]);
@@ -381,6 +393,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setOnboardEmail("");
     setOnboardLocation("");
     setOnboardSkills("");
+    setOnboardAvatarUrl("");
     setPostProfileNextScreen("club");
     setClubId("");
     setActiveClubName("");
@@ -536,12 +549,17 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
 
     let clubsById = new Map<
       string,
-      { id: string; name: string; description: string | null }
+      {
+        id: string;
+        name: string;
+        description: string | null;
+        logo_url: string | null;
+      }
     >();
     if (clubIds.length > 0) {
       const { data: clubsData } = await supabase
         .from("clubs")
-        .select("id,name,description")
+        .select("id,name,description,logo_url")
         .in("id", clubIds);
       clubsById = new Map((clubsData || []).map((club) => [club.id, club]));
     }
@@ -552,6 +570,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
         name: clubsById.get(membership.club_id)?.name ?? "Your club",
         description: clubsById.get(membership.club_id)?.description ?? "",
         role: mapRole(membership.role),
+        logoUrl: clubsById.get(membership.club_id)?.logo_url ?? undefined,
       })),
     );
 
@@ -698,7 +717,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
 
     const { data, error } = await supabase
       .from("members")
-      .select("id,name,role,user_id,membership_status,phone")
+      .select(
+        "id,name,role,user_id,membership_status,phone,avatar_url,location,skills",
+      )
       .eq("club_id", activeClubId)
       .order("created_at", { ascending: true });
 
@@ -735,6 +756,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
         duesPaid: false,
         status: member.membership_status,
         phone: member.phone ?? undefined,
+        avatarUrl: member.avatar_url ?? undefined,
+        location: member.location ?? undefined,
+        skills: member.skills ?? undefined,
       })),
     );
   };
@@ -866,9 +890,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
 
     setLedgerEntries(
       data.map((row: any) => {
-        const member = Array.isArray(row.member)
-          ? row.member[0]
-          : row.member;
+        const member = Array.isArray(row.member) ? row.member[0] : row.member;
         return {
           id: row.id,
           type: row.type as TransactionType,
@@ -1830,6 +1852,11 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setOnboardEmail(metadataEmail || user.email || "");
     setOnboardLocation(metadataLocation);
     setOnboardSkills(metadataSkills);
+    setOnboardAvatarUrl(
+      typeof user.user_metadata?.avatar_url === "string"
+        ? user.user_metadata.avatar_url
+        : "",
+    );
 
     const { data: activeMemberships, error: activeMembershipsError } =
       await supabase
@@ -1979,6 +2006,8 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
         member_email: trimmedEmail,
         location: onboardLocation.trim() || null,
         skills: onboardSkills.trim() || null,
+        avatar_url: onboardAvatarUrl || null,
+        terms_accepted_at: new Date().toISOString(),
       },
     });
     setLoading(false);
@@ -2029,6 +2058,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
         user_id: user.id,
         name: trimmedName,
         email: trimmedEmail,
+        location: onboardLocation.trim() || null,
+        skills: onboardSkills.trim() || null,
+        avatar_url: onboardAvatarUrl || null,
         membership_status: "active",
         is_active: true,
       })
@@ -2047,6 +2079,8 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
         member_email: trimmedEmail,
         location: onboardLocation.trim() || null,
         skills: onboardSkills.trim() || null,
+        avatar_url: onboardAvatarUrl || null,
+        terms_accepted_at: new Date().toISOString(),
       },
     });
 
@@ -2302,6 +2336,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       .insert({
         name: trimmedClubName,
         description: trimmedDescription,
+        logo_url: clubLogoUrl || null,
         created_by: user.id,
       })
       .select("id")
@@ -2336,6 +2371,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       loadMembers(createdClub.id),
       loadInvites(createdClub.id),
     ]);
+    setClubLogoUrl("");
     setLoading(false);
     setInfoText("Club created and owner membership added.");
     navigate("members");
@@ -2347,13 +2383,169 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     }
     const { data } = await supabase
       .from("clubs")
-      .select("name,description")
+      .select("name,description,logo_url")
       .eq("id", clubId)
       .maybeSingle();
     if (data) {
       setClubName(data.name ?? "");
       setClubDescription(data.description ?? "");
+      setClubLogoUrl(data.logo_url ?? "");
     }
+  };
+
+  // Lets a user pick an image from their library and uploads it to the public
+  // `avatars` storage bucket under a folder named after their auth uid. The
+  // resulting public URL is stored on the auth account (user-global) and
+  // best-effort synced onto the current club's member row so the directory can
+  // render it. The image is decoded from base64 (Expo gives us this directly)
+  // into bytes for the storage upload — no extra native module needed.
+  const pickAndUploadAvatar = async () => {
+    setErrorText("");
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setErrorText("Photo access is needed to set a profile picture.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
+    });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset?.base64) {
+      return;
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
+      setErrorText("Session not found. Please login again.");
+      return;
+    }
+
+    setUploadingAvatar(true);
+
+    // Decode base64 -> bytes (atob is available in the RN/Hermes runtime).
+    const binary = atob(asset.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    const path = `${user.id}/avatar.jpg`;
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+
+    if (uploadError) {
+      setUploadingAvatar(false);
+      setErrorText(uploadError.message);
+      return;
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("avatars").getPublicUrl(path);
+    // Cache-bust so a replaced photo shows immediately (same path, new bytes).
+    const versionedUrl = `${publicUrl}?v=${Date.now()}`;
+
+    await supabase.auth.updateUser({ data: { avatar_url: versionedUrl } });
+    if (clubId && currentMemberId) {
+      const { error: syncError } = await supabase
+        .from("members")
+        .update({ avatar_url: versionedUrl })
+        .eq("id", currentMemberId);
+      if (!syncError) {
+        await loadMembers(clubId);
+      }
+    }
+
+    setOnboardAvatarUrl(versionedUrl);
+    setUploadingAvatar(false);
+    setInfoText("Profile photo updated.");
+  };
+
+  // Lets a leadership member pick a club logo. Stored in the same public
+  // `avatars` bucket under the uploader's own uid folder (so existing storage
+  // policies apply): `<uid>/club-<clubId|draft>.jpg`. During club creation
+  // there is no clubId yet, so the URL is held in `clubLogoUrl` and written
+  // when the club is inserted; from Club settings it updates the row directly.
+  const pickAndUploadClubLogo = async () => {
+    setErrorText("");
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setErrorText("Photo access is needed to set a club logo.");
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
+    });
+    const asset = result.canceled ? null : result.assets[0];
+    if (!asset?.base64) {
+      return;
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user?.id) {
+      setErrorText("Session not found. Please login again.");
+      return;
+    }
+
+    setUploadingClubLogo(true);
+
+    const binary = atob(asset.base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+
+    const path = `${user.id}/club-${clubId || "draft"}.jpg`;
+    const { error: uploadError } = await supabase.storage
+      .from("avatars")
+      .upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+
+    if (uploadError) {
+      setUploadingClubLogo(false);
+      setErrorText(uploadError.message);
+      return;
+    }
+
+    const {
+      data: { publicUrl },
+    } = supabase.storage.from("avatars").getPublicUrl(path);
+    const versionedUrl = `${publicUrl}?v=${Date.now()}`;
+
+    // From Club settings (existing club), persist immediately. During creation
+    // we only stage the URL; createClub writes it on insert.
+    if (clubId && currentRole !== "Member" && currentRole !== "") {
+      const { error: updateError } = await supabase
+        .from("clubs")
+        .update({ logo_url: versionedUrl })
+        .eq("id", clubId);
+      if (updateError) {
+        setUploadingClubLogo(false);
+        setErrorText(updateError.message);
+        return;
+      }
+      await loadHomeData();
+    }
+
+    setClubLogoUrl(versionedUrl);
+    setUploadingClubLogo(false);
+    setInfoText("Club logo updated.");
   };
 
   // Refreshes the editable profile fields from the logged-in account so the
@@ -2385,6 +2577,11 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setOnboardEmail(metadataEmail || user.email || "");
     setOnboardLocation(metadataLocation);
     setOnboardSkills(metadataSkills);
+    setOnboardAvatarUrl(
+      typeof user.user_metadata?.avatar_url === "string"
+        ? user.user_metadata.avatar_url
+        : "",
+    );
   };
 
   const updateClubProfile = async (name: string, description: string) => {
@@ -2508,6 +2705,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
         member_email: trimmedEmail,
         location: onboardLocation.trim() || null,
         skills: onboardSkills.trim() || null,
+        avatar_url: onboardAvatarUrl || null,
       },
     });
 
@@ -2523,7 +2721,13 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     if (clubId && currentMemberId) {
       const { error: syncError } = await supabase
         .from("members")
-        .update({ name: trimmedName, email: trimmedEmail })
+        .update({
+          name: trimmedName,
+          email: trimmedEmail,
+          location: onboardLocation.trim() || null,
+          skills: onboardSkills.trim() || null,
+          avatar_url: onboardAvatarUrl || null,
+        })
         .eq("id", currentMemberId);
       if (!syncError) {
         await loadMembers(clubId);
@@ -2918,6 +3122,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const startCreateClub = () => {
     setClubName("");
     setClubDescription("");
+    setClubLogoUrl("");
     navigate("club");
   };
 
@@ -2969,6 +3174,12 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setOnboardLocation,
     onboardSkills,
     setOnboardSkills,
+    onboardAvatarUrl,
+    uploadingAvatar,
+    pickAndUploadAvatar,
+    clubLogoUrl,
+    uploadingClubLogo,
+    pickAndUploadClubLogo,
     loading,
     toast,
     notify,
