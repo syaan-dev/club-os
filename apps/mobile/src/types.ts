@@ -104,6 +104,7 @@ export type LedgerEntry = {
   category: string;
   paymentMethod: string;
   description: string | null;
+  memberName: string | null;
   createdAt: string;
 };
 

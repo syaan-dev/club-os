@@ -89,6 +89,9 @@ export default function EconomyScreen() {
     generateDues,
     ensureAutoDuesCycles,
     recordTransaction,
+    startDuePayment,
+    sendDuePaymentLinks,
+    currentMemberId,
   } = useClubOs();
 
   const [tab, setTab] = useState<EconomyTab>("dues");
@@ -309,9 +312,26 @@ export default function EconomyScreen() {
                       {formatAmount(item.amountDue)}
                     </Text>
                   </View>
-                  <Text style={dueStatusStyle(item.status)}>
-                    {dueStatusLabel(item.status)}
-                  </Text>
+                  <View style={{ alignItems: "flex-end", gap: 6 }}>
+                    <Text style={dueStatusStyle(item.status)}>
+                      {dueStatusLabel(item.status)}
+                    </Text>
+                    {item.memberId === currentMemberId &&
+                    (item.status === "pending" || item.status === "overdue") ? (
+                      <Pressable
+                        onPress={() => startDuePayment(item)}
+                        disabled={loading}
+                        style={[
+                          styles.inlineButton,
+                          loading && styles.buttonDisabled,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Pay dues for ${item.cycleLabel}`}
+                      >
+                        <Text style={styles.inlineButtonText}>Pay now</Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
                 </View>
               )}
             />
@@ -355,7 +375,11 @@ export default function EconomyScreen() {
                     <Text style={styles.memberName}>{item.category}</Text>
                     <Text style={styles.memberMeta}>
                       {item.paymentMethod}
-                      {item.description ? ` \u00b7 ${item.description}` : ""}
+                      {item.memberName
+                        ? ` \u00b7 ${item.memberName}`
+                        : item.description
+                          ? ` \u00b7 ${item.description}`
+                          : ""}
                     </Text>
                     <Text style={styles.metaText}>
                       {formatDateTime(item.createdAt)}
@@ -483,20 +507,38 @@ export default function EconomyScreen() {
                           {item.dueDate ? `Due ${item.dueDate}` : "No due date"}
                         </Text>
                       </Pressable>
-                      <Pressable
-                        onPress={() => generateDues(item.id)}
-                        disabled={loading}
-                        style={[
-                          styles.inlineButton,
-                          loading && styles.buttonDisabled,
-                        ]}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Generate dues for ${item.cycleLabel}`}
-                      >
-                        <Text style={styles.inlineButtonText}>
-                          Generate dues
-                        </Text>
-                      </Pressable>
+                      <View style={{ alignItems: "flex-end", gap: 6 }}>
+                        <Pressable
+                          onPress={() => generateDues(item.id)}
+                          disabled={loading}
+                          style={[
+                            styles.inlineButton,
+                            loading && styles.buttonDisabled,
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Generate dues for ${item.cycleLabel}`}
+                        >
+                          <Text style={styles.inlineButtonText}>
+                            Generate dues
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() =>
+                            sendDuePaymentLinks({ cycleId: item.id })
+                          }
+                          disabled={loading}
+                          style={[
+                            styles.inlineButton,
+                            loading && styles.buttonDisabled,
+                          ]}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Resend payment links for ${item.cycleLabel}`}
+                        >
+                          <Text style={styles.inlineButtonText}>
+                            Resend links
+                          </Text>
+                        </Pressable>
+                      </View>
                     </View>
                   )}
                 />

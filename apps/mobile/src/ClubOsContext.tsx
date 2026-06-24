@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useRouter } from "expo-router";
 import * as Contacts from "expo-contacts";
+import * as WebBrowser from "expo-web-browser";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
@@ -182,6 +183,11 @@ type ClubOsContextValue = {
     category: string;
     paymentMethod: string;
     description: string;
+  }) => Promise<void>;
+  startDuePayment: (due: MemberDue) => Promise<void>;
+  sendDuePaymentLinks: (input: {
+    cycleId?: string;
+    dueId?: string;
   }) => Promise<void>;
   refreshActivities: () => Promise<void>;
   createMeeting: (input: {
@@ -443,8 +449,8 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
 
   // Route the user to the relevant tab when they tap a push notification.
   useEffect(() => {
-    const subscription = NotificationsApi.addNotificationResponseReceivedListener(
-      (response) => {
+    const subscription =
+      NotificationsApi.addNotificationResponseReceivedListener((response) => {
         const data = response.notification.request.content.data as {
           type?: string;
         };
@@ -456,13 +462,24 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
             break;
           case "dues_assigned":
           case "dues_overdue":
+          case "dues_paid":
             navigate("economy");
             break;
+          case "dues_payment_link": {
+            const url = (
+              response.notification.request.content.data as { url?: string }
+            )?.url;
+            if (url) {
+              void WebBrowser.openBrowserAsync(url);
+            } else {
+              navigate("economy");
+            }
+            break;
+          }
           default:
             break;
         }
-      },
-    );
+      });
     return () => subscription.remove();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -835,7 +852,9 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const loadLedger = async (activeClubId: string) => {
     const { data, error } = await supabase
       .from("transactions")
-      .select("id,type,amount,category,payment_method,description,created_at")
+      .select(
+        "id,type,amount,category,payment_method,description,created_at,member:members!transactions_member_id_fkey(name)",
+      )
       .eq("club_id", activeClubId)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -846,15 +865,21 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     }
 
     setLedgerEntries(
-      data.map((row) => ({
-        id: row.id,
-        type: row.type as TransactionType,
-        amount: Number(row.amount ?? 0),
-        category: row.category ?? "",
-        paymentMethod: row.payment_method ?? "",
-        description: row.description ?? null,
-        createdAt: row.created_at ?? "",
-      })),
+      data.map((row: any) => {
+        const member = Array.isArray(row.member)
+          ? row.member[0]
+          : row.member;
+        return {
+          id: row.id,
+          type: row.type as TransactionType,
+          amount: Number(row.amount ?? 0),
+          category: row.category ?? "",
+          paymentMethod: row.payment_method ?? "",
+          description: row.description ?? null,
+          memberName: member?.name ?? null,
+          createdAt: row.created_at ?? "",
+        };
+      }),
     );
   };
 
@@ -1700,6 +1725,69 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setInfoText(
       `${input.type === "income" ? "Income" : "Expense"} of ${input.amount} recorded.`,
     );
+  };
+
+  // Member taps "Pay now": mint (or reuse) a Stripe Payment Link for their due
+  // and open it in the in-app browser. Stripe confirms via webhook, so we just
+  // refresh dues when the browser closes.
+  const startDuePayment = async (due: MemberDue) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+
+    setLoading(true);
+    const { data, error } = await supabase.functions.invoke(
+      "create-due-payment-link",
+      { body: { dueId: due.id } },
+    );
+    setLoading(false);
+
+    const url = (data as { url?: string } | null)?.url;
+    if (error || !url) {
+      setErrorText(error?.message ?? "Could not start the payment.");
+      return;
+    }
+
+    await WebBrowser.openBrowserAsync(url);
+    await refreshDues();
+  };
+
+  // Manager action: ask the backend to create and push payment links for a
+  // whole billing cycle or a single due.
+  const sendDuePaymentLinks = async (input: {
+    cycleId?: string;
+    dueId?: string;
+  }) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!canManageFinances(currentRole)) {
+      setErrorText("Only an owner or treasurer can send payment links.");
+      return;
+    }
+
+    setLoading(true);
+    const { data, error } = await supabase.functions.invoke(
+      "send-due-payment-links",
+      { body: input },
+    );
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    const sent = (data as { sent?: number } | null)?.sent ?? 0;
+    setInfoText(`Sent ${sent} payment link${sent === 1 ? "" : "s"}.`);
   };
 
   const detectPostLoginFlow = async () => {
@@ -2916,6 +3004,8 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     generateDues,
     ensureAutoDuesCycles,
     recordTransaction,
+    startDuePayment,
+    sendDuePaymentLinks,
     refreshActivities,
     createMeeting,
     updateMeetingStatus,

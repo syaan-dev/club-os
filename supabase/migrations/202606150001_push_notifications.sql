@@ -45,6 +45,7 @@ create table if not exists public.device_push_tokens (
 
 create index if not exists idx_device_push_tokens_user on public.device_push_tokens(user_id);
 
+drop trigger if exists trg_device_push_tokens_updated_at on public.device_push_tokens;
 create trigger trg_device_push_tokens_updated_at
 before update on public.device_push_tokens
 for each row execute function public.set_updated_at();
@@ -57,6 +58,7 @@ alter table public.notifications enable row level security;
 alter table public.device_push_tokens enable row level security;
 
 -- A member reads only the notifications addressed to them.
+drop policy if exists notifications_select_self on public.notifications;
 create policy notifications_select_self
 on public.notifications
 for select
@@ -72,6 +74,7 @@ using (
 );
 
 -- A member may mark their own notifications read (the only field they change).
+drop policy if exists notifications_update_self on public.notifications;
 create policy notifications_update_self
 on public.notifications
 for update
@@ -96,18 +99,21 @@ with check (
 );
 
 -- A user fully manages only their own device tokens.
+drop policy if exists device_push_tokens_select_self on public.device_push_tokens;
 create policy device_push_tokens_select_self
 on public.device_push_tokens
 for select
 to authenticated
 using (user_id = auth.uid());
 
+drop policy if exists device_push_tokens_insert_self on public.device_push_tokens;
 create policy device_push_tokens_insert_self
 on public.device_push_tokens
 for insert
 to authenticated
 with check (user_id = auth.uid());
 
+drop policy if exists device_push_tokens_update_self on public.device_push_tokens;
 create policy device_push_tokens_update_self
 on public.device_push_tokens
 for update
@@ -115,6 +121,7 @@ to authenticated
 using (user_id = auth.uid())
 with check (user_id = auth.uid());
 
+drop policy if exists device_push_tokens_delete_self on public.device_push_tokens;
 create policy device_push_tokens_delete_self
 on public.device_push_tokens
 for delete

@@ -228,42 +228,52 @@ create index if not exists idx_announcement_reads_announcement on public.announc
 -- updated_at triggers
 -- ---------------------------------------------------------------------------
 
+drop trigger if exists trg_clubs_updated_at on public.clubs;
 create trigger trg_clubs_updated_at
 before update on public.clubs
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_members_updated_at on public.members;
 create trigger trg_members_updated_at
 before update on public.members
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_dues_plans_updated_at on public.dues_plans;
 create trigger trg_dues_plans_updated_at
 before update on public.dues_plans
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_dues_cycles_updated_at on public.dues_cycles;
 create trigger trg_dues_cycles_updated_at
 before update on public.dues_cycles
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_member_dues_updated_at on public.member_dues;
 create trigger trg_member_dues_updated_at
 before update on public.member_dues
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_transactions_updated_at on public.transactions;
 create trigger trg_transactions_updated_at
 before update on public.transactions
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_club_meetings_updated_at on public.club_meetings;
 create trigger trg_club_meetings_updated_at
 before update on public.club_meetings
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_club_polls_updated_at on public.club_polls;
 create trigger trg_club_polls_updated_at
 before update on public.club_polls
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_poll_votes_updated_at on public.poll_votes;
 create trigger trg_poll_votes_updated_at
 before update on public.poll_votes
 for each row execute function public.set_updated_at();
 
+drop trigger if exists trg_club_announcements_updated_at on public.club_announcements;
 create trigger trg_club_announcements_updated_at
 before update on public.club_announcements
 for each row execute function public.set_updated_at();

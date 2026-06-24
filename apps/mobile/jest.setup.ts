@@ -8,6 +8,10 @@ jest.mock("expo-device", () => ({
   isDevice: false,
 }));
 
+jest.mock("expo-web-browser", () => ({
+  openBrowserAsync: jest.fn(async () => ({ type: "dismiss" })),
+}));
+
 jest.mock("expo-notifications", () => ({
   setNotificationHandler: jest.fn(),
   getPermissionsAsync: jest.fn(async () => ({

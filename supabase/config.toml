@@ -372,6 +372,15 @@ authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
 
+# Stripe webhook is authenticated by the Stripe signature, not a user JWT.
+[functions.stripe-webhook]
+verify_jwt = false
+
+# send-due-payment-links accepts the database trigger's shared secret in
+# addition to a manager JWT, so the platform JWT gate must be off.
+[functions.send-due-payment-links]
+verify_jwt = false
+
 [edge_runtime]
 enabled = true
 # Supported request policies: `oneshot`, `per_worker`.
