@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Image, Pressable, Text, View } from "react-native";
 import { styles } from "../styles";
-import { useClubOs } from "../ClubOsContext";
+import { useClubs, useMembers } from "../context/domainHooks";
 import { ClubSwitchSheet } from "./ClubSwitchSheet";
 
 export function ClubHeader() {
-  const { activeClubName, currentRole, members, myClubs, clubId } = useClubOs();
+  const { activeClubName, myClubs, clubId } = useClubs();
+  const { currentRole, members } = useMembers();
   const [sheetVisible, setSheetVisible] = useState(false);
 
   const name = activeClubName || "Select a club";

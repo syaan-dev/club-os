@@ -1,6 +1,6 @@
 import { Image, Pressable, Text, TextInput, View } from "react-native";
 import { styles, colors } from "../src/styles";
-import { useClubOs } from "../src/ClubOsContext";
+import { useClubs, useUi } from "../src/context/domainHooks";
 import { AppButton } from "../src/components/AppButton";
 import { OnboardingShell } from "../src/components/OnboardingShell";
 
@@ -13,9 +13,9 @@ export default function ClubScreen() {
     clubLogoUrl,
     uploadingClubLogo,
     pickAndUploadClubLogo,
-    loading,
     createClub,
-  } = useClubOs();
+  } = useClubs();
+  const { loading } = useUi();
 
   return (
     <OnboardingShell showLoading>

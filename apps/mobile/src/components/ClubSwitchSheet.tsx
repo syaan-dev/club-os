@@ -1,6 +1,6 @@
 import { Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { styles } from "../styles";
-import { useClubOs } from "../ClubOsContext";
+import { useClubs, useNavigation } from "../context/domainHooks";
 
 export function ClubSwitchSheet({
   visible,
@@ -9,7 +9,8 @@ export function ClubSwitchSheet({
   visible: boolean;
   onClose: () => void;
 }) {
-  const { myClubs, clubId, switchClub, navigate } = useClubOs();
+  const { myClubs, clubId, switchClub } = useClubs();
+  const { navigate } = useNavigation();
 
   const handleSelect = async (targetClubId: string, name: string) => {
     onClose();

@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { styles } from "../../src/styles";
-import { useClubOs } from "../../src/ClubOsContext";
+import { useMembers, useUi } from "../../src/context/domainHooks";
 import type { Member } from "../../src/types";
 import { AppButton } from "../../src/components/AppButton";
 import { TabScreenShell } from "../../src/components/TabScreenShell";
@@ -45,8 +45,8 @@ export default function MembersScreen() {
     currentRole,
     currentMemberId,
     updateMemberRole,
-    loading,
-  } = useClubOs();
+  } = useMembers();
+  const { loading } = useUi();
 
   const canInvite = currentRole === "Owner" || currentRole === "Treasurer";
   // Owner, Treasurer and Secretary can reassign member roles.

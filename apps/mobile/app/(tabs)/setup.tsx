@@ -9,7 +9,7 @@ import {
   View,
 } from "react-native";
 import { styles } from "../../src/styles";
-import { useClubOs } from "../../src/ClubOsContext";
+import { useClubs, useMembers, useProfile, useAuth, useUi } from "../../src/context/domainHooks";
 import { AppButton } from "../../src/components/AppButton";
 import { TabScreenShell } from "../../src/components/TabScreenShell";
 
@@ -44,7 +44,18 @@ function SetupRow({
 export default function SetupScreen() {
   const {
     activeClubName,
-    currentRole,
+    clubName,
+    setClubName,
+    clubDescription,
+    setClubDescription,
+    clubLogoUrl,
+    uploadingClubLogo,
+    pickAndUploadClubLogo,
+    loadClubProfile,
+    updateClubProfile,
+  } = useClubs();
+  const { currentRole, leaveClub } = useMembers();
+  const {
     onboardName,
     setOnboardName,
     onboardEmail,
@@ -56,24 +67,14 @@ export default function SetupScreen() {
     onboardAvatarUrl,
     uploadingAvatar,
     pickAndUploadAvatar,
-    clubName,
-    setClubName,
-    clubDescription,
-    setClubDescription,
-    clubLogoUrl,
-    uploadingClubLogo,
-    pickAndUploadClubLogo,
-    loadClubProfile,
     loadMyProfile,
-    updateClubProfile,
     saveProfile,
     resendEmailVerification,
     emailVerified,
     emailPending,
-    leaveClub,
-    logout,
-    loading,
-  } = useClubOs();
+  } = useProfile();
+  const { logout } = useAuth();
+  const { loading } = useUi();
 
   const isOwner = currentRole === "Owner";
   // Club profile, roles & permissions and billing are leadership-only.

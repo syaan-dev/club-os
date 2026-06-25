@@ -1,17 +1,17 @@
 import { Text, View } from "react-native";
 import { styles } from "../src/styles";
-import { useClubOs } from "../src/ClubOsContext";
+import { useMembers, useUi } from "../src/context/domainHooks";
 import { AppButton } from "../src/components/AppButton";
 import { OnboardingShell } from "../src/components/OnboardingShell";
 
 export default function MemberRequestsScreen() {
   const {
     membershipRequests,
-    loading,
     acceptMembershipRequest,
     declineMembershipRequest,
     resumeOnboarding,
-  } = useClubOs();
+  } = useMembers();
+  const { loading } = useUi();
 
   return (
     <OnboardingShell showLoading>

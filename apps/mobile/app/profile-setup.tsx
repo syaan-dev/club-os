@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Image, Pressable, Text, TextInput, View } from "react-native";
 import { styles, colors } from "../src/styles";
-import { useClubOs } from "../src/ClubOsContext";
+import { useProfile, useUi } from "../src/context/domainHooks";
 import { AppButton } from "../src/components/AppButton";
 import { OnboardingShell } from "../src/components/OnboardingShell";
 
@@ -18,9 +18,9 @@ export default function ProfileSetupScreen() {
     onboardAvatarUrl,
     uploadingAvatar,
     pickAndUploadAvatar,
-    loading,
     completeBasicProfile,
-  } = useClubOs();
+  } = useProfile();
+  const { loading } = useUi();
 
   const [agreed, setAgreed] = useState(false);
 

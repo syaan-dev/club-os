@@ -1,17 +1,6 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "expo-router";
-import * as Contacts from "expo-contacts";
-import * as Linking from "expo-linking";
 import * as WebBrowser from "expo-web-browser";
-import * as ImagePicker from "expo-image-picker";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "../lib/supabase";
@@ -37,19 +26,51 @@ import type {
   TransactionType,
 } from "./types";
 import { canManageFinances, deriveDuesSummary } from "./dues";
+import { buildInviteLink, isLeadership, mapRole, normalizePhone } from "./lib/format";
+import { fetchMembershipRequests, fetchMyClubs } from "./data/clubs";
+import { fetchMembers } from "./data/members";
+import {
+  fetchDuesCycles,
+  fetchDuesPlans,
+  fetchLedger,
+  fetchMemberDues,
+} from "./data/dues";
+import {
+  fetchAnnouncements,
+  fetchMeetings,
+  fetchPolls,
+} from "./data/activities";
+import { useActivityActions } from "./context/useActivityActions";
+import { useAuthActions } from "./context/useAuthActions";
+import { useClubProfileActions } from "./context/useClubProfileActions";
+import { useDuesActions } from "./context/useDuesActions";
+import { useMemberActions } from "./context/useMemberActions";
+import { useProfileActions } from "./context/useProfileActions";
+import { emailRedirectUrl } from "./lib/email";
+import { useStableApi } from "./lib/useStableApi";
+import {
+  ActivitiesContext,
+  AuthContext,
+  ClubsContext,
+  DuesContext,
+  MembersContext,
+  NavigationContext,
+  ProfileContext,
+  ToastContext,
+  UiContext,
+  useDomainContext,
+  type ActivitiesContextValue,
+  type AuthContextValue,
+  type ClubsContextValue,
+  type DuesContextValue,
+  type MembersContextValue,
+  type NavigationContextValue,
+  type ProfileContextValue,
+  type ToastContextValue,
+  type UiContextValue,
+} from "./context/domainContexts";
 
 const ACTIVE_CLUB_KEY = "clubos.activeClub";
-
-// Where Supabase sends the user after they click the email-confirmation link.
-// Deep-links back into the app via the `clubos://` scheme. Wrapped in try/catch
-// because Linking.createURL can throw under the Jest test runner.
-function emailRedirectUrl(): string | undefined {
-  try {
-    return Linking.createURL("verify-email");
-  } catch {
-    return undefined;
-  }
-}
 
 export type ToastKind = "success" | "error" | "info";
 
@@ -73,14 +94,9 @@ const screenToPath: Record<Screen, string> = {
 };
 
 // Roles permitted to manage club activities (meetings, polls, announcements).
-// Mirrors the `*_manage_leadership` RLS policies. The Secretary owns meetings
-// and polls per the PRA role matrix; Owner/Treasurer are included for
-// operational continuity.
-function isLeadership(role: Member["role"] | ""): boolean {
-  return role === "Owner" || role === "Treasurer" || role === "Secretary";
-}
+// See `isLeadership` in ./lib/format.
 
-type ClubOsContextValue = {
+export type ClubOsContextValue = {
   phone: string;
   setPhone: (value: string) => void;
   otp: string;
@@ -254,14 +270,21 @@ type ClubOsContextValue = {
   logout: () => Promise<void>;
 };
 
-const ClubOsContext = createContext<ClubOsContextValue | null>(null);
-
-export function useClubOs() {
-  const value = useContext(ClubOsContext);
-  if (!value) {
-    throw new Error("useClubOs must be used within a ClubOsProvider");
-  }
-  return value;
+// Back-compat composite of every domain context. Prefer the focused domain
+// hooks in ./context/domainHooks — they read a single context each and so avoid
+// the cross-domain re-renders this composite would incur.
+export function useClubOs(): ClubOsContextValue {
+  return {
+    ...useDomainContext(UiContext),
+    ...useDomainContext(ToastContext),
+    ...useDomainContext(NavigationContext),
+    ...useDomainContext(AuthContext),
+    ...useDomainContext(ProfileContext),
+    ...useDomainContext(ClubsContext),
+    ...useDomainContext(MembersContext),
+    ...useDomainContext(DuesContext),
+    ...useDomainContext(ActivitiesContext),
+  };
 }
 
 export function ClubOsProvider({ children }: { children: ReactNode }) {
@@ -512,37 +535,6 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const normalizePhone = (value: string) => {
-    const trimmed = value.trim();
-    if (!trimmed) {
-      return "";
-    }
-
-    // Normalize all user input (including +prefixed values) to strict E.164.
-    const digitsOnly = trimmed.replace(/\D/g, "");
-    if (digitsOnly.length === 10) {
-      return `+91${digitsOnly}`;
-    }
-    return `+${digitsOnly}`;
-  };
-
-  const buildInviteLink = (token: string, club: string) => {
-    return `clubos://join?token=${encodeURIComponent(token)}&club=${encodeURIComponent(club)}`;
-  };
-
-  const mapRole = (role: string | null): Member["role"] => {
-    if (role === "owner") {
-      return "Owner";
-    }
-    if (role === "treasurer") {
-      return "Treasurer";
-    }
-    if (role === "secretary") {
-      return "Secretary";
-    }
-    return "Member";
-  };
-
   const loadHomeData = async () => {
     const {
       data: { user },
@@ -551,43 +543,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const { data: memberships } = await supabase
-      .from("members")
-      .select("id,club_id,role,membership_status")
-      .eq("user_id", user.id)
-      .eq("membership_status", "active")
-      .order("created_at", { ascending: true });
-
-    const clubIds = Array.from(
-      new Set((memberships || []).map((membership) => membership.club_id)),
-    );
-
-    let clubsById = new Map<
-      string,
-      {
-        id: string;
-        name: string;
-        description: string | null;
-        logo_url: string | null;
-      }
-    >();
-    if (clubIds.length > 0) {
-      const { data: clubsData } = await supabase
-        .from("clubs")
-        .select("id,name,description,logo_url")
-        .in("id", clubIds);
-      clubsById = new Map((clubsData || []).map((club) => [club.id, club]));
-    }
-
-    setMyClubs(
-      (memberships || []).map((membership) => ({
-        clubId: membership.club_id,
-        name: clubsById.get(membership.club_id)?.name ?? "Your club",
-        description: clubsById.get(membership.club_id)?.description ?? "",
-        role: mapRole(membership.role),
-        logoUrl: clubsById.get(membership.club_id)?.logo_url ?? undefined,
-      })),
-    );
+    setMyClubs(await fetchMyClubs(user.id));
 
     const normalizedPhone = normalizePhone(user.phone ?? "");
     if (normalizedPhone) {
@@ -665,62 +621,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   };
 
   const loadMembershipRequests = async (invitedPhone: string) => {
-    const { data: invitesData, error: invitesError } = await supabase
-      .from("club_invites")
-      .select("id,club_id,token,status")
-      .eq("invited_phone", invitedPhone)
-      .in("status", ["pending", "accepted"])
-      .order("created_at", { ascending: false });
-
-    if (invitesError || !invitesData || invitesData.length === 0) {
-      setMembershipRequests([]);
-      return [] as MembershipRequest[];
-    }
-
-    const { data: memberRows, error: memberRowsError } = await supabase
-      .from("members")
-      .select("id,club_id")
-      .eq("phone", invitedPhone)
-      .is("user_id", null)
-      .eq("membership_status", "invited");
-
-    if (memberRowsError) {
-      setMembershipRequests([]);
-      return [] as MembershipRequest[];
-    }
-
-    const memberByClub = new Map(
-      (memberRows || []).map((m) => [m.club_id, m.id]),
-    );
-    const clubIds = Array.from(
-      new Set(invitesData.map((invite) => invite.club_id)),
-    );
-
-    const { data: clubsData } = await supabase
-      .from("clubs")
-      .select("id,name")
-      .in("id", clubIds);
-
-    const clubNameById = new Map(
-      (clubsData || []).map((club) => [club.id, club.name]),
-    );
-
-    const requests = invitesData
-      .map((invite) => {
-        const memberId = memberByClub.get(invite.club_id);
-        const club = clubNameById.get(invite.club_id) ?? "Your club";
-        return {
-          inviteId: invite.id,
-          memberId: memberId ?? null,
-          clubId: invite.club_id,
-          clubName: club,
-          token: invite.token,
-          inviteLink: buildInviteLink(invite.token, club),
-          status: invite.status,
-        } satisfies MembershipRequest;
-      })
-      .filter((item): item is MembershipRequest => Boolean(item));
-
+    const requests = await fetchMembershipRequests(invitedPhone);
     setMembershipRequests(requests);
     return requests;
   };
@@ -730,90 +631,20 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       data: { user },
     } = await supabase.auth.getUser();
 
-    const { data, error } = await supabase
-      .from("members")
-      .select(
-        "id,name,role,user_id,membership_status,phone,avatar_url,location,skills",
-      )
-      .eq("club_id", activeClubId)
-      .order("created_at", { ascending: true });
-
-    if (error || !data) {
+    const result = await fetchMembers(activeClubId, user?.id);
+    if (!result) {
       return;
     }
 
-    const myMemberRow = data.find((member) => member.user_id === user?.id);
-    setCurrentMemberId(myMemberRow?.id ?? "");
-    setCurrentRole(
-      myMemberRow?.role === "owner"
-        ? "Owner"
-        : myMemberRow?.role === "treasurer"
-          ? "Treasurer"
-          : myMemberRow?.role === "secretary"
-            ? "Secretary"
-            : myMemberRow
-              ? "Member"
-              : "",
-    );
-
-    setMembers(
-      data.map((member) => ({
-        id: member.id,
-        name: member.name,
-        role:
-          member.role === "owner"
-            ? "Owner"
-            : member.role === "treasurer"
-              ? "Treasurer"
-              : member.role === "secretary"
-                ? "Secretary"
-                : "Member",
-        duesPaid: false,
-        status: member.membership_status,
-        phone: member.phone ?? undefined,
-        avatarUrl: member.avatar_url ?? undefined,
-        location: member.location ?? undefined,
-        skills: member.skills ?? undefined,
-      })),
-    );
+    setCurrentMemberId(result.myMemberId);
+    setCurrentRole(result.myRole);
+    setMembers(result.members);
   };
 
   const loadDues = async (activeClubId: string) => {
     setDuesLoading(true);
 
-    const { data, error } = await supabase
-      .from("member_dues")
-      .select(
-        "id,member_id,amount_due,amount_paid,status,members(name),dues_cycles(cycle_label,due_date)",
-      )
-      .eq("club_id", activeClubId)
-      .order("created_at", { ascending: true });
-
-    if (error || !data) {
-      setMemberDues([]);
-      setDuesLoading(false);
-      return;
-    }
-
-    const mapped: MemberDue[] = data.map((row: any) => {
-      const memberRel = Array.isArray(row.members)
-        ? row.members[0]
-        : row.members;
-      const cycleRel = Array.isArray(row.dues_cycles)
-        ? row.dues_cycles[0]
-        : row.dues_cycles;
-      return {
-        id: row.id,
-        memberId: row.member_id,
-        memberName: memberRel?.name ?? "Member",
-        cycleLabel: cycleRel?.cycle_label ?? "Cycle",
-        dueDate: cycleRel?.due_date ?? "",
-        amountDue: Number(row.amount_due ?? 0),
-        amountPaid: Number(row.amount_paid ?? 0),
-        status: row.status,
-      } satisfies MemberDue;
-    });
-
+    const mapped = await fetchMemberDues(activeClubId);
     setMemberDues(mapped);
 
     const billedMemberIds = new Set(mapped.map((due) => due.memberId));
@@ -835,220 +666,27 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   };
 
   const loadDuesPlans = async (activeClubId: string) => {
-    const { data, error } = await supabase
-      .from("dues_plans")
-      .select("id,name,amount,frequency,grace_days,auto_generate,start_date")
-      .eq("club_id", activeClubId)
-      .eq("is_active", true)
-      .order("created_at", { ascending: false });
-
-    if (error || !data) {
-      setDuesPlans([]);
-      return;
-    }
-
-    setDuesPlans(
-      data.map((row) => ({
-        id: row.id,
-        name: row.name,
-        amount: Number(row.amount ?? 0),
-        frequency: row.frequency as DuesFrequency,
-        graceDays: Number(row.grace_days ?? 0),
-        autoGenerate: Boolean(row.auto_generate),
-        startDate: row.start_date ?? null,
-      })),
-    );
+    setDuesPlans(await fetchDuesPlans(activeClubId));
   };
 
   const loadDuesCycles = async (activeClubId: string) => {
-    const { data, error } = await supabase
-      .from("dues_cycles")
-      .select("id,dues_plan_id,cycle_label,due_date,dues_plans(name)")
-      .eq("club_id", activeClubId)
-      .order("due_date", { ascending: false });
-
-    if (error || !data) {
-      setDuesCycles([]);
-      return;
-    }
-
-    setDuesCycles(
-      data.map((row: any) => {
-        const planRel = Array.isArray(row.dues_plans)
-          ? row.dues_plans[0]
-          : row.dues_plans;
-        return {
-          id: row.id,
-          duesPlanId: row.dues_plan_id,
-          planName: planRel?.name ?? "Plan",
-          cycleLabel: row.cycle_label,
-          dueDate: row.due_date ?? "",
-        } satisfies DuesCycle;
-      }),
-    );
+    setDuesCycles(await fetchDuesCycles(activeClubId));
   };
 
   const loadLedger = async (activeClubId: string) => {
-    const { data, error } = await supabase
-      .from("transactions")
-      .select(
-        "id,type,amount,category,payment_method,description,created_at,member:members!transactions_member_id_fkey(name)",
-      )
-      .eq("club_id", activeClubId)
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (error || !data) {
-      setLedgerEntries([]);
-      return;
-    }
-
-    setLedgerEntries(
-      data.map((row: any) => {
-        const member = Array.isArray(row.member) ? row.member[0] : row.member;
-        return {
-          id: row.id,
-          type: row.type as TransactionType,
-          amount: Number(row.amount ?? 0),
-          category: row.category ?? "",
-          paymentMethod: row.payment_method ?? "",
-          description: row.description ?? null,
-          memberName: member?.name ?? null,
-          createdAt: row.created_at ?? "",
-        };
-      }),
-    );
+    setLedgerEntries(await fetchLedger(activeClubId));
   };
 
   const loadMeetings = async (activeClubId: string) => {
-    const { data, error } = await supabase
-      .from("club_meetings")
-      .select("id,title,description,location,scheduled_at,status,members(name)")
-      .eq("club_id", activeClubId)
-      .order("scheduled_at", { ascending: false });
-
-    if (error || !data) {
-      setMeetings([]);
-      return;
-    }
-
-    setMeetings(
-      data.map((row: any) => {
-        const creator = Array.isArray(row.members)
-          ? row.members[0]
-          : row.members;
-        return {
-          id: row.id,
-          title: row.title,
-          description: row.description ?? null,
-          location: row.location ?? null,
-          scheduledAt: row.scheduled_at ?? "",
-          status: row.status as MeetingStatus,
-          createdByName: creator?.name ?? "Someone",
-        } satisfies ClubMeeting;
-      }),
-    );
+    setMeetings(await fetchMeetings(activeClubId));
   };
 
   const loadPolls = async (activeClubId: string) => {
-    const { data, error } = await supabase
-      .from("club_polls")
-      .select("id,question,options,status,closes_at,created_at,members(name)")
-      .eq("club_id", activeClubId)
-      .order("created_at", { ascending: false });
-
-    if (error || !data) {
-      setPolls([]);
-      return;
-    }
-
-    const pollIds = data.map((row: any) => row.id);
-    let votes: any[] = [];
-    if (pollIds.length > 0) {
-      const { data: voteData } = await supabase
-        .from("poll_votes")
-        .select("poll_id,option_index,member_id")
-        .in("poll_id", pollIds);
-      votes = voteData ?? [];
-    }
-
-    const myId = currentMemberId;
-    setPolls(
-      data.map((row: any) => {
-        const creator = Array.isArray(row.members)
-          ? row.members[0]
-          : row.members;
-        const options: string[] = Array.isArray(row.options) ? row.options : [];
-        const voteCounts = options.map(() => 0);
-        let totalVotes = 0;
-        let myOptionIndex: number | null = null;
-        for (const vote of votes) {
-          if (vote.poll_id !== row.id) continue;
-          totalVotes += 1;
-          const idx = vote.option_index;
-          if (typeof idx === "number" && idx >= 0 && idx < voteCounts.length) {
-            voteCounts[idx] += 1;
-          }
-          if (myId && vote.member_id === myId) {
-            myOptionIndex = typeof idx === "number" ? idx : null;
-          }
-        }
-        return {
-          id: row.id,
-          question: row.question,
-          options,
-          status: row.status as PollStatus,
-          closesAt: row.closes_at ?? null,
-          createdByName: creator?.name ?? "Someone",
-          createdAt: row.created_at ?? "",
-          voteCounts,
-          totalVotes,
-          myOptionIndex,
-        } satisfies Poll;
-      }),
-    );
+    setPolls(await fetchPolls(activeClubId, currentMemberId));
   };
 
   const loadAnnouncements = async (activeClubId: string) => {
-    const { data, error } = await supabase
-      .from("club_announcements")
-      .select("id,title,body,created_at,members(name)")
-      .eq("club_id", activeClubId)
-      .order("created_at", { ascending: false })
-      .limit(50);
-
-    if (error || !data) {
-      setAnnouncements([]);
-      return;
-    }
-
-    const myId = currentMemberId;
-    const announcementIds = data.map((row: any) => row.id);
-    let readIds = new Set<string>();
-    if (myId && announcementIds.length > 0) {
-      const { data: reads } = await supabase
-        .from("announcement_reads")
-        .select("announcement_id")
-        .eq("member_id", myId)
-        .in("announcement_id", announcementIds);
-      readIds = new Set((reads ?? []).map((row: any) => row.announcement_id));
-    }
-
-    setAnnouncements(
-      data.map((row: any) => {
-        const creator = Array.isArray(row.members)
-          ? row.members[0]
-          : row.members;
-        return {
-          id: row.id,
-          title: row.title,
-          body: row.body,
-          createdByName: creator?.name ?? "Someone",
-          createdAt: row.created_at ?? "",
-          isRead: readIds.has(row.id),
-        } satisfies Announcement;
-      }),
-    );
+    setAnnouncements(await fetchAnnouncements(activeClubId, currentMemberId));
   };
 
   const refreshActivities = async () => {
@@ -1064,768 +702,52 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setActivityLoading(false);
   };
 
-  const createMeeting = async (input: {
-    title: string;
-    description: string;
-    location: string;
-    scheduledAt: string;
-  }) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId || !currentMemberId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!isLeadership(currentRole)) {
-      setErrorText(
-        "Only an owner, treasurer or secretary can schedule meetings.",
-      );
-      return;
-    }
-    const title = input.title.trim();
-    if (!title) {
-      setErrorText("Meeting title is required.");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.scheduledAt)) {
-      setErrorText("Date must be in YYYY-MM-DD format.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.from("club_meetings").insert({
-      club_id: clubId,
-      title,
-      description: input.description.trim() || null,
-      location: input.location.trim() || null,
-      scheduled_at: input.scheduledAt,
-      created_by: currentMemberId,
-    });
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadMeetings(clubId);
-    setInfoText(`Meeting "${title}" scheduled.`);
-  };
-
-  const updateMeetingStatus = async (
-    meetingId: string,
-    status: MeetingStatus,
-  ) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!isLeadership(currentRole)) {
-      setErrorText(
-        "Only an owner, treasurer or secretary can update meetings.",
-      );
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase
-      .from("club_meetings")
-      .update({ status })
-      .eq("id", meetingId)
-      .eq("club_id", clubId);
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadMeetings(clubId);
-  };
-
-  const updateMeeting = async (
-    meetingId: string,
-    input: {
-      title: string;
-      description: string;
-      location: string;
-      scheduledAt: string;
-    },
-  ) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!isLeadership(currentRole)) {
-      setErrorText("Only an owner, treasurer or secretary can edit meetings.");
-      return;
-    }
-    const title = input.title.trim();
-    if (!title) {
-      setErrorText("Meeting title is required.");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.scheduledAt)) {
-      setErrorText("Date must be in YYYY-MM-DD format.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase
-      .from("club_meetings")
-      .update({
-        title,
-        description: input.description.trim() || null,
-        location: input.location.trim() || null,
-        scheduled_at: input.scheduledAt,
-      })
-      .eq("id", meetingId)
-      .eq("club_id", clubId);
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadMeetings(clubId);
-    setInfoText(`Meeting "${title}" updated.`);
-  };
-
-  const createPoll = async (input: {
-    question: string;
-    options: string[];
-    closesAt: string;
-  }) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId || !currentMemberId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!isLeadership(currentRole)) {
-      setErrorText("Only an owner, treasurer or secretary can create polls.");
-      return;
-    }
-    const question = input.question.trim();
-    if (!question) {
-      setErrorText("Poll question is required.");
-      return;
-    }
-    const options = input.options.map((o) => o.trim()).filter(Boolean);
-    if (options.length < 2) {
-      setErrorText("Add at least two options.");
-      return;
-    }
-    if (options.length > 10) {
-      setErrorText("A poll can have at most 10 options.");
-      return;
-    }
-    if (input.closesAt && !/^\d{4}-\d{2}-\d{2}$/.test(input.closesAt)) {
-      setErrorText("Close date must be in YYYY-MM-DD format.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.from("club_polls").insert({
-      club_id: clubId,
-      question,
-      options,
-      closes_at: input.closesAt ? input.closesAt : null,
-      created_by: currentMemberId,
-    });
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadPolls(clubId);
-    setInfoText("Poll created.");
-  };
-
-  const castVote = async (pollId: string, optionIndex: number) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId || !currentMemberId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.from("poll_votes").upsert(
-      {
-        club_id: clubId,
-        poll_id: pollId,
-        member_id: currentMemberId,
-        option_index: optionIndex,
-      },
-      { onConflict: "poll_id,member_id" },
-    );
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadPolls(clubId);
-  };
-
-  const closePoll = async (pollId: string) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!isLeadership(currentRole)) {
-      setErrorText("Only an owner, treasurer or secretary can close polls.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase
-      .from("club_polls")
-      .update({ status: "closed" })
-      .eq("id", pollId)
-      .eq("club_id", clubId);
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadPolls(clubId);
-    setInfoText("Poll closed.");
-  };
-
-  const createAnnouncement = async (input: { title: string; body: string }) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId || !currentMemberId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!isLeadership(currentRole)) {
-      setErrorText(
-        "Only an owner, treasurer or secretary can post announcements.",
-      );
-      return;
-    }
-    const title = input.title.trim();
-    const body = input.body.trim();
-    if (!title) {
-      setErrorText("Announcement title is required.");
-      return;
-    }
-    if (!body) {
-      setErrorText("Announcement message is required.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.from("club_announcements").insert({
-      club_id: clubId,
-      title,
-      body,
-      created_by: currentMemberId,
-    });
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadAnnouncements(clubId);
-    setInfoText("Announcement posted.");
-  };
-
-  const setAnnouncementRead = async (announcementId: string, read: boolean) => {
-    if (!clubId || !currentMemberId) {
-      return;
-    }
-
-    // Optimistically update the local list so the badge and item react fast.
-    setAnnouncements((prev) =>
-      prev.map((item) =>
-        item.id === announcementId ? { ...item, isRead: read } : item,
-      ),
-    );
-
-    if (read) {
-      const { error } = await supabase.from("announcement_reads").upsert(
-        {
-          announcement_id: announcementId,
-          member_id: currentMemberId,
-          club_id: clubId,
-        },
-        { onConflict: "announcement_id,member_id" },
-      );
-      if (error) {
-        setAnnouncements((prev) =>
-          prev.map((item) =>
-            item.id === announcementId ? { ...item, isRead: false } : item,
-          ),
-        );
-      }
-    } else {
-      const { error } = await supabase
-        .from("announcement_reads")
-        .delete()
-        .eq("announcement_id", announcementId)
-        .eq("member_id", currentMemberId);
-      if (error) {
-        setAnnouncements((prev) =>
-          prev.map((item) =>
-            item.id === announcementId ? { ...item, isRead: true } : item,
-          ),
-        );
-      }
-    }
-  };
-
-  const createDuesPlan = async (input: {
-    name: string;
-    amount: number;
-    frequency: DuesFrequency;
-    graceDays: number;
-    autoGenerate: boolean;
-    startDate: string;
-  }) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId || !currentMemberId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!canManageFinances(currentRole)) {
-      setErrorText("Only an owner or treasurer can create dues plans.");
-      return;
-    }
-
-    const name = input.name.trim();
-    if (!name) {
-      setErrorText("Plan name is required.");
-      return;
-    }
-    if (!(input.amount > 0)) {
-      setErrorText("Amount must be greater than zero.");
-      return;
-    }
-    if (!Number.isInteger(input.graceDays) || input.graceDays < 0) {
-      setErrorText("Grace days must be a non-negative whole number.");
-      return;
-    }
-    const startDate = input.startDate.trim();
-    if (input.autoGenerate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-      setErrorText("Auto-billing needs a start date in YYYY-MM-DD format.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.from("dues_plans").insert({
-      club_id: clubId,
-      name,
-      amount: input.amount,
-      frequency: input.frequency,
-      grace_days: input.graceDays,
-      auto_generate: input.autoGenerate,
-      start_date: input.autoGenerate ? startDate : null,
-      created_by: currentMemberId,
-    });
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadDuesPlans(clubId);
-    if (input.autoGenerate) {
-      await ensureAutoDuesCycles();
-    }
-    setInfoText(`Dues plan "${name}" created.`);
-  };
-
-  const updateDuesPlan = async (
-    planId: string,
-    input: {
-      name: string;
-      amount: number;
-      frequency: DuesFrequency;
-      graceDays: number;
-      autoGenerate: boolean;
-      startDate: string;
-    },
-  ) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!canManageFinances(currentRole)) {
-      setErrorText("Only an owner or treasurer can edit dues plans.");
-      return;
-    }
-
-    const name = input.name.trim();
-    if (!name) {
-      setErrorText("Plan name is required.");
-      return;
-    }
-    if (!(input.amount > 0)) {
-      setErrorText("Amount must be greater than zero.");
-      return;
-    }
-    if (!Number.isInteger(input.graceDays) || input.graceDays < 0) {
-      setErrorText("Grace days must be a non-negative whole number.");
-      return;
-    }
-    const startDate = input.startDate.trim();
-    if (input.autoGenerate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
-      setErrorText("Auto-billing needs a start date in YYYY-MM-DD format.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase
-      .from("dues_plans")
-      .update({
-        name,
-        amount: input.amount,
-        frequency: input.frequency,
-        grace_days: input.graceDays,
-        auto_generate: input.autoGenerate,
-        start_date: input.autoGenerate ? startDate : null,
-      })
-      .eq("id", planId)
-      .eq("club_id", clubId);
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadDuesPlans(clubId);
-    if (input.autoGenerate) {
-      await ensureAutoDuesCycles();
-    }
-    setInfoText(`Dues plan "${name}" updated.`);
-  };
-
-  const createDuesCycle = async (input: {
-    duesPlanId: string;
-    cycleLabel: string;
-    dueDate: string;
-  }) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!canManageFinances(currentRole)) {
-      setErrorText("Only an owner or treasurer can create dues cycles.");
-      return;
-    }
-    if (!input.duesPlanId) {
-      setErrorText("Select a dues plan for this cycle.");
-      return;
-    }
-    const cycleLabel = input.cycleLabel.trim();
-    if (!cycleLabel) {
-      setErrorText("Cycle label is required (e.g. 2026-06).");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) {
-      setErrorText("Due date must be in YYYY-MM-DD format.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.from("dues_cycles").insert({
-      club_id: clubId,
-      dues_plan_id: input.duesPlanId,
-      cycle_label: cycleLabel,
-      due_date: input.dueDate,
-    });
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadDuesCycles(clubId);
-    setInfoText(`Dues cycle "${cycleLabel}" created.`);
-  };
-
-  const updateDuesCycle = async (
-    cycleId: string,
-    input: {
-      duesPlanId: string;
-      cycleLabel: string;
-      dueDate: string;
-    },
-  ) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!canManageFinances(currentRole)) {
-      setErrorText("Only an owner or treasurer can edit dues cycles.");
-      return;
-    }
-    if (!input.duesPlanId) {
-      setErrorText("Select a dues plan for this cycle.");
-      return;
-    }
-    const cycleLabel = input.cycleLabel.trim();
-    if (!cycleLabel) {
-      setErrorText("Cycle label is required (e.g. 2026-06).");
-      return;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) {
-      setErrorText("Due date must be in YYYY-MM-DD format.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase
-      .from("dues_cycles")
-      .update({
-        dues_plan_id: input.duesPlanId,
-        cycle_label: cycleLabel,
-        due_date: input.dueDate,
-      })
-      .eq("id", cycleId)
-      .eq("club_id", clubId);
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadDuesCycles(clubId);
-    setInfoText(`Dues cycle "${cycleLabel}" updated.`);
-  };
-
-  const generateDues = async (cycleId: string) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!canManageFinances(currentRole)) {
-      setErrorText("Only an owner or treasurer can generate dues.");
-      return;
-    }
-
-    setLoading(true);
-    const { data, error } = await supabase.rpc("generate_dues_for_cycle", {
-      _cycle_id: cycleId,
-    });
-
-    if (error) {
-      setLoading(false);
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadDues(clubId);
-    setLoading(false);
-    const count = typeof data === "number" ? data : 0;
-    setInfoText(
-      count > 0
-        ? `Billed ${count} member${count === 1 ? "" : "s"} for this cycle.`
-        : "No new dues to generate — everyone is already billed.",
-    );
-  };
-
-  const ensureAutoDuesCycles = async (options?: { announce?: boolean }) => {
-    const announce = options?.announce ?? false;
-    if (!clubId) {
-      return;
-    }
-    if (!canManageFinances(currentRole)) {
-      return;
-    }
-
-    const autoPlans = duesPlans.filter(
-      (plan) => plan.autoGenerate && plan.startDate,
-    );
-    if (autoPlans.length === 0) {
-      if (announce) {
-        setInfoText("No auto-billing plans set up yet.");
-      }
-      return;
-    }
-
-    let created = 0;
-    for (const plan of autoPlans) {
-      const { data, error } = await supabase.rpc(
-        "ensure_dues_cycles_for_plan",
-        { _plan_id: plan.id },
-      );
-      if (error) {
-        setErrorText(error.message);
-        return;
-      }
-      created += typeof data === "number" ? data : 0;
-    }
-
-    if (created > 0) {
-      await Promise.all([loadDuesCycles(clubId), loadDues(clubId)]);
-      setInfoText(
-        `Auto-billing created ${created} new cycle${created === 1 ? "" : "s"}.`,
-      );
-    } else if (announce) {
-      setInfoText("Auto-billing is up to date — no new cycles.");
-    }
-  };
-
-  const recordTransaction = async (input: {
-    type: TransactionType;
-    amount: number;
-    category: string;
-    paymentMethod: string;
-    description: string;
-  }) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId || !currentMemberId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!canManageFinances(currentRole)) {
-      setErrorText("Only an owner or treasurer can record transactions.");
-      return;
-    }
-    if (!(input.amount > 0)) {
-      setErrorText("Amount must be greater than zero.");
-      return;
-    }
-    const category = input.category.trim();
-    if (!category) {
-      setErrorText("Category is required.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.from("transactions").insert({
-      club_id: clubId,
-      member_id: null,
-      recorded_by: currentMemberId,
-      type: input.type,
-      amount: input.amount,
-      category,
-      payment_method: input.paymentMethod.trim() || "UPI",
-      status: "completed",
-      description: input.description.trim() || null,
-      source: "manual",
-    });
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    await loadLedger(clubId);
-    setInfoText(
-      `${input.type === "income" ? "Income" : "Expense"} of ${input.amount} recorded.`,
-    );
-  };
-
-  // Member taps "Pay now": mint (or reuse) a Stripe Payment Link for their due
-  // and open it in the in-app browser. Stripe confirms via webhook, so we just
-  // refresh dues when the browser closes.
-  const startDuePayment = async (due: MemberDue) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-
-    setLoading(true);
-    const { data, error } = await supabase.functions.invoke(
-      "create-due-payment-link",
-      { body: { dueId: due.id } },
-    );
-    setLoading(false);
-
-    const url = (data as { url?: string } | null)?.url;
-    if (error || !url) {
-      setErrorText(error?.message ?? "Could not start the payment.");
-      return;
-    }
-
-    await WebBrowser.openBrowserAsync(url);
-    await refreshDues();
-  };
-
-  // Manager action: ask the backend to create and push payment links for a
-  // whole billing cycle or a single due.
-  const sendDuePaymentLinks = async (input: {
-    cycleId?: string;
-    dueId?: string;
-  }) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Open a club first.");
-      return;
-    }
-    if (!canManageFinances(currentRole)) {
-      setErrorText("Only an owner or treasurer can send payment links.");
-      return;
-    }
-
-    setLoading(true);
-    const { data, error } = await supabase.functions.invoke(
-      "send-due-payment-links",
-      { body: input },
-    );
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    const sent = (data as { sent?: number } | null)?.sent ?? 0;
-    setInfoText(`Sent ${sent} payment link${sent === 1 ? "" : "s"}.`);
-  };
+  const {
+    createMeeting,
+    updateMeetingStatus,
+    updateMeeting,
+    createPoll,
+    castVote,
+    closePoll,
+    createAnnouncement,
+    setAnnouncementRead,
+  } = useActivityActions({
+    clubId,
+    currentRole,
+    currentMemberId,
+    setErrorText,
+    setInfoText,
+    setLoading,
+    setAnnouncements,
+    loadMeetings,
+    loadPolls,
+    loadAnnouncements,
+  });
+
+  const {
+    ensureAutoDuesCycles,
+    createDuesPlan,
+    updateDuesPlan,
+    createDuesCycle,
+    updateDuesCycle,
+    generateDues,
+    recordTransaction,
+    startDuePayment,
+    sendDuePaymentLinks,
+  } = useDuesActions({
+    clubId,
+    currentRole,
+    currentMemberId,
+    duesPlans,
+    setErrorText,
+    setInfoText,
+    setLoading,
+    loadDues,
+    loadDuesPlans,
+    loadDuesCycles,
+    loadLedger,
+    refreshDues,
+  });
 
   const detectPostLoginFlow = async () => {
     setErrorText("");
@@ -2257,82 +1179,17 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const sendOtp = async () => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!isSupabaseConfigured) {
-      setErrorText(
-        "Supabase env vars are missing. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.",
-      );
-      return;
-    }
-
-    const normalizedPhone = normalizePhone(phone);
-    if (normalizedPhone.length < 10) {
-      setErrorText("Enter a valid phone number with country code.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOtp({
-      phone: normalizedPhone,
-    });
-    setLoading(false);
-
-    if (error) {
-      if (error.message.toLowerCase().includes("unsupported phone provider")) {
-        setErrorText(
-          "Local SMS provider mismatch. Ensure [auth.sms] enable_signup=true, [auth.sms.test_otp] has +919876543210 mapping, restart Supabase, and use EXPO_PUBLIC_SUPABASE_ANON_KEY (not a secret key).",
-        );
-      } else {
-        setErrorText(error.message);
-      }
-      return;
-    }
-
-    setPhone(normalizedPhone);
-    setOtpSent(true);
-    setInfoText("OTP sent. Enter the 6-digit code to continue.");
-  };
-
-  const verifyOtpAndContinue = async () => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!isSupabaseConfigured) {
-      setErrorText(
-        "Supabase env vars are missing. Add EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY.",
-      );
-      return;
-    }
-
-    const normalizedPhone = normalizePhone(phone);
-    if (otp.trim().length < 6) {
-      setErrorText("Enter the 6-digit OTP.");
-      return;
-    }
-
-    setLoading(true);
-    const {
-      data: { session: verifiedSession },
-      error,
-    } = await supabase.auth.verifyOtp({
-      phone: normalizedPhone,
-      token: otp.trim(),
-      type: "sms",
-    });
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-
-    setSession(verifiedSession);
-    await detectPostLoginFlow();
-    setInfoText("Phone verified successfully.");
-  };
+  const { sendOtp, verifyOtpAndContinue } = useAuthActions({
+    phone,
+    otp,
+    setPhone,
+    setOtpSent,
+    setSession,
+    setErrorText,
+    setInfoText,
+    setLoading,
+    detectPostLoginFlow,
+  });
 
   const createClub = async () => {
     setErrorText("");
@@ -2408,177 +1265,6 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     navigate("members");
   };
 
-  const loadClubProfile = async () => {
-    if (!clubId) {
-      return;
-    }
-    const { data } = await supabase
-      .from("clubs")
-      .select("name,description,logo_url")
-      .eq("id", clubId)
-      .maybeSingle();
-    if (data) {
-      setClubName(data.name ?? "");
-      setClubDescription(data.description ?? "");
-      setClubLogoUrl(data.logo_url ?? "");
-    }
-  };
-
-  // Lets a user pick an image from their library and uploads it to the public
-  // `avatars` storage bucket under a folder named after their auth uid. The
-  // resulting public URL is stored on the auth account (user-global) and
-  // best-effort synced onto the current club's member row so the directory can
-  // render it. The image is decoded from base64 (Expo gives us this directly)
-  // into bytes for the storage upload — no extra native module needed.
-  const pickAndUploadAvatar = async () => {
-    setErrorText("");
-
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setErrorText("Photo access is needed to set a profile picture.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-      base64: true,
-    });
-    const asset = result.canceled ? null : result.assets[0];
-    if (!asset?.base64) {
-      return;
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user?.id) {
-      setErrorText("Session not found. Please login again.");
-      return;
-    }
-
-    setUploadingAvatar(true);
-
-    // Decode base64 -> bytes (atob is available in the RN/Hermes runtime).
-    const binary = atob(asset.base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-
-    const path = `${user.id}/avatar.jpg`;
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(path, bytes, { contentType: "image/jpeg", upsert: true });
-
-    if (uploadError) {
-      setUploadingAvatar(false);
-      setErrorText(uploadError.message);
-      return;
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("avatars").getPublicUrl(path);
-    // Cache-bust so a replaced photo shows immediately (same path, new bytes).
-    const versionedUrl = `${publicUrl}?v=${Date.now()}`;
-
-    await supabase.auth.updateUser({ data: { avatar_url: versionedUrl } });
-    if (clubId && currentMemberId) {
-      const { error: syncError } = await supabase
-        .from("members")
-        .update({ avatar_url: versionedUrl })
-        .eq("id", currentMemberId);
-      if (!syncError) {
-        await loadMembers(clubId);
-      }
-    }
-
-    setOnboardAvatarUrl(versionedUrl);
-    setUploadingAvatar(false);
-    setInfoText("Profile photo updated.");
-  };
-
-  // Lets a leadership member pick a club logo. Stored in the same public
-  // `avatars` bucket under the uploader's own uid folder (so existing storage
-  // policies apply): `<uid>/club-<clubId|draft>.jpg`. During club creation
-  // there is no clubId yet, so the URL is held in `clubLogoUrl` and written
-  // when the club is inserted; from Club settings it updates the row directly.
-  const pickAndUploadClubLogo = async () => {
-    setErrorText("");
-
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setErrorText("Photo access is needed to set a club logo.");
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.7,
-      base64: true,
-    });
-    const asset = result.canceled ? null : result.assets[0];
-    if (!asset?.base64) {
-      return;
-    }
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user?.id) {
-      setErrorText("Session not found. Please login again.");
-      return;
-    }
-
-    setUploadingClubLogo(true);
-
-    const binary = atob(asset.base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i += 1) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-
-    const path = `${user.id}/club-${clubId || "draft"}.jpg`;
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(path, bytes, { contentType: "image/jpeg", upsert: true });
-
-    if (uploadError) {
-      setUploadingClubLogo(false);
-      setErrorText(uploadError.message);
-      return;
-    }
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("avatars").getPublicUrl(path);
-    const versionedUrl = `${publicUrl}?v=${Date.now()}`;
-
-    // From Club settings (existing club), persist immediately. During creation
-    // we only stage the URL; createClub writes it on insert.
-    if (clubId && currentRole !== "Member" && currentRole !== "") {
-      const { error: updateError } = await supabase
-        .from("clubs")
-        .update({ logo_url: versionedUrl })
-        .eq("id", clubId);
-      if (updateError) {
-        setUploadingClubLogo(false);
-        setErrorText(updateError.message);
-        return;
-      }
-      await loadHomeData();
-    }
-
-    setClubLogoUrl(versionedUrl);
-    setUploadingClubLogo(false);
-    setInfoText("Club logo updated.");
-  };
-
   // Refreshes the editable profile fields from the logged-in account so the
   // Setup "Your profile" sheet always shows current values.
   const loadMyProfile = async () => {
@@ -2621,195 +1307,69 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     );
   };
 
-  const updateClubProfile = async (name: string, description: string) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("No active club to update.");
-      return;
-    }
-    if (currentRole === "Member" || currentRole === "") {
-      setErrorText("You don't have permission to edit the club profile.");
-      return;
-    }
-
-    const trimmedName = name.trim();
-    const trimmedDescription = description.trim();
-    if (!trimmedName) {
-      setErrorText("Club name is required.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase
-      .from("clubs")
-      .update({
-        name: trimmedName,
-        description: trimmedDescription || null,
-      })
-      .eq("id", clubId);
-
-    if (error) {
-      setLoading(false);
-      setErrorText(error.message);
-      return;
-    }
-
-    await supabase.from("audit_events").insert({
-      club_id: clubId,
-      actor_member_id: currentMemberId || null,
-      event_type: "club_profile_updated",
-      entity_type: "club",
-      entity_id: clubId,
-      event_data: { name: trimmedName },
+  const { loadClubProfile, pickAndUploadClubLogo, updateClubProfile } =
+    useClubProfileActions({
+      clubId,
+      currentRole,
+      currentMemberId,
+      setClubName,
+      setClubDescription,
+      setClubLogoUrl,
+      setActiveClubName,
+      setUploadingClubLogo,
+      setErrorText,
+      setInfoText,
+      setLoading,
+      loadHomeData,
+      persistActiveClub,
     });
 
-    setActiveClubName(trimmedName);
-    setClubName(trimmedName);
-    setClubDescription(trimmedDescription);
-    void persistActiveClub(clubId, trimmedName);
-    await loadHomeData();
-    setLoading(false);
-    setInfoText("Club profile updated.");
-  };
+  const {
+    updateMemberRole,
+    inviteMember,
+    loadContacts,
+    selectContact,
+    requestContactsForInvite,
+    inviteContacts,
+  } = useMemberActions({
+    clubId,
+    currentRole,
+    currentMemberId,
+    activeClubName,
+    invitePhone,
+    inviteName,
+    inviteEmail,
+    setInviteName,
+    setInvitePhone,
+    setInviteEmail,
+    setContactOptions,
+    setContactsVisible,
+    setContactsLoading,
+    setContactsPermission,
+    setErrorText,
+    setInfoText,
+    setLoading,
+    loadInvites,
+    loadMembers,
+  });
 
-  const updateMemberRole = async (
-    memberId: string,
-    newRole: Member["role"],
-  ) => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("No active club.");
-      return;
-    }
-    if (currentRole === "Member" || currentRole === "") {
-      setErrorText("You don't have permission to change member roles.");
-      return;
-    }
-    if (memberId === currentMemberId) {
-      setErrorText("You can't change your own role.");
-      return;
-    }
-
-    const dbRole = newRole.toLowerCase();
-
-    setLoading(true);
-    const { error } = await supabase
-      .from("members")
-      .update({ role: dbRole })
-      .eq("id", memberId)
-      .eq("club_id", clubId);
-
-    if (error) {
-      setLoading(false);
-      setErrorText(error.message);
-      return;
-    }
-
-    await supabase.from("audit_events").insert({
-      club_id: clubId,
-      actor_member_id: currentMemberId || null,
-      event_type: "member_role_changed",
-      entity_type: "member",
-      entity_id: memberId,
-      event_data: { new_role: dbRole },
+  const { saveProfile, resendEmailVerification, pickAndUploadAvatar } =
+    useProfileActions({
+      clubId,
+      currentMemberId,
+      session,
+      onboardName,
+      onboardEmail,
+      onboardLocation,
+      onboardSkills,
+      onboardAvatarUrl,
+      setOnboardAvatarUrl,
+      setUploadingAvatar,
+      setErrorText,
+      setInfoText,
+      setLoading,
+      loadMembers,
     });
-
-    await loadMembers(clubId);
-    setLoading(false);
-    setInfoText("Member role updated.");
-  };
-
-  const saveProfile = async () => {
-    setErrorText("");
-    setInfoText("");
-
-    const trimmedName = onboardName.trim();
-    const trimmedEmail = onboardEmail.trim().toLowerCase();
-
-    if (!trimmedName || !trimmedEmail) {
-      setErrorText("Name and email are required.");
-      return;
-    }
-
-    setLoading(true);
-    const needsEmailVerify =
-      trimmedEmail !== (session?.user?.email ?? "").toLowerCase();
-    const { error } = await supabase.auth.updateUser(
-      {
-        ...(needsEmailVerify ? { email: trimmedEmail } : {}),
-        data: {
-          full_name: trimmedName,
-          member_email: trimmedEmail,
-          location: onboardLocation.trim() || null,
-          skills: onboardSkills.trim() || null,
-          avatar_url: onboardAvatarUrl || null,
-        },
-      },
-      needsEmailVerify ? { emailRedirectTo: emailRedirectUrl() } : undefined,
-    );
-
-    if (error) {
-      setLoading(false);
-      setErrorText(error.message);
-      return;
-    }
-
-    // Best-effort sync of the directory row. Owners/treasurers can write any
-    // member row; a plain member's own-row write is blocked by RLS, so we
-    // ignore that failure rather than surfacing a confusing error.
-    if (clubId && currentMemberId) {
-      const { error: syncError } = await supabase
-        .from("members")
-        .update({
-          name: trimmedName,
-          email: trimmedEmail,
-          location: onboardLocation.trim() || null,
-          skills: onboardSkills.trim() || null,
-          avatar_url: onboardAvatarUrl || null,
-        })
-        .eq("id", currentMemberId);
-      if (!syncError) {
-        await loadMembers(clubId);
-      }
-    }
-
-    setLoading(false);
-    setInfoText(
-      needsEmailVerify
-        ? `Profile updated. We sent a verification link to ${trimmedEmail}.`
-        : "Profile updated.",
-    );
-  };
-
-  // Re-sends the email-confirmation link for the address currently on file so
-  // the member can prove ownership. Re-issuing the email change via updateUser
-  // triggers Supabase to deliver a fresh confirmation link.
-  const resendEmailVerification = async () => {
-    setErrorText("");
-    setInfoText("");
-    const trimmedEmail = onboardEmail.trim().toLowerCase();
-    if (!trimmedEmail) {
-      setErrorText("Add an email address first.");
-      return;
-    }
-
-    setLoading(true);
-    const { error } = await supabase.auth.updateUser(
-      { email: trimmedEmail },
-      { emailRedirectTo: emailRedirectUrl() },
-    );
-    setLoading(false);
-
-    if (error) {
-      setErrorText(error.message);
-      return;
-    }
-    setInfoText(`Verification link sent to ${trimmedEmail}.`);
-  };
 
   const leaveClub = async () => {
     setErrorText("");
@@ -2900,298 +1460,6 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     verifiedEmail.toLowerCase() === onboardEmail.trim().toLowerCase();
   const emailPending = pendingEmail.length > 0;
 
-  const inviteMember = async () => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Create a club first.");
-      return;
-    }
-
-    if (!currentMemberId) {
-      setErrorText("Unable to resolve your membership role. Please re-login.");
-      return;
-    }
-
-    const normalizedPhone = invitePhone ? normalizePhone(invitePhone) : "";
-    const trimmedName = inviteName.trim();
-    const trimmedEmail = inviteEmail.trim().toLowerCase();
-
-    if (!normalizedPhone) {
-      setErrorText(
-        "Phone number is required for member invitation in Phase 1.",
-      );
-      return;
-    }
-
-    if (normalizedPhone.length < 10) {
-      setErrorText("Enter a valid phone number with country code.");
-      return;
-    }
-
-    const { data: existingMember } = await supabase
-      .from("members")
-      .select("id,membership_status")
-      .eq("club_id", clubId)
-      .eq("phone", normalizedPhone)
-      .in("membership_status", ["invited", "active", "suspended"])
-      .order("created_at", { ascending: false })
-      .limit(1);
-
-    if (existingMember && existingMember.length > 0) {
-      setErrorText("This phone number is already in your club member records.");
-      return;
-    }
-
-    setLoading(true);
-    const token = `invite_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    const expiresAt = new Date(
-      Date.now() + 7 * 24 * 60 * 60 * 1000,
-    ).toISOString();
-
-    const { data: invitedMemberRow, error: invitedMemberCreateError } =
-      await supabase
-        .from("members")
-        .insert({
-          club_id: clubId,
-          user_id: null,
-          name: trimmedName || "Invited member",
-          email: trimmedEmail || null,
-          phone: normalizedPhone,
-          role: "member",
-          membership_status: "invited",
-          is_active: true,
-        })
-        .select("id")
-        .single();
-
-    if (invitedMemberCreateError || !invitedMemberRow) {
-      setLoading(false);
-      setErrorText(
-        invitedMemberCreateError?.message ??
-          "Failed to create member invite record.",
-      );
-      return;
-    }
-
-    const { error } = await supabase.from("club_invites").insert({
-      club_id: clubId,
-      invited_phone: normalizedPhone || null,
-      invited_email: trimmedEmail || null,
-      token,
-      invited_by: currentMemberId,
-      expires_at: expiresAt,
-    });
-
-    if (error) {
-      await supabase.from("members").delete().eq("id", invitedMemberRow.id);
-      setLoading(false);
-      setErrorText(error.message);
-      return;
-    }
-
-    setInviteName("");
-    setInvitePhone("");
-    setInviteEmail("");
-    await Promise.all([loadInvites(clubId), loadMembers(clubId)]);
-    setLoading(false);
-    const inviteLink = buildInviteLink(token, activeClubName || "Your club");
-    setInfoText(
-      `Invite created for ${activeClubName || "your club"}. Link: ${inviteLink}`,
-    );
-  };
-
-  const loadContacts = async () => {
-    setErrorText("");
-    setContactsLoading(true);
-
-    const permission = await Contacts.requestPermissionsAsync();
-    if (permission.status !== "granted") {
-      setContactsLoading(false);
-      setErrorText("Contacts permission denied. Please enter phone manually.");
-      return;
-    }
-
-    const contactsResult = await Contacts.getContactsAsync({
-      fields: [Contacts.Fields.PhoneNumbers],
-      pageSize: 80,
-    });
-
-    const mappedContacts: ContactOption[] = (contactsResult.data || [])
-      .map((contact, index) => {
-        const phoneValue = contact.phoneNumbers?.[0]?.number ?? "";
-        return {
-          id: contact.id ?? `contact_${index}`,
-          name: contact.name || "Unnamed contact",
-          phone: normalizePhone(phoneValue),
-        };
-      })
-      .filter((contact) => contact.phone.length >= 10);
-
-    setContactOptions(mappedContacts);
-    setContactsVisible(true);
-    setContactsLoading(false);
-    if (mappedContacts.length === 0) {
-      setInfoText("No contacts with valid phone numbers found on this device.");
-    }
-  };
-
-  const selectContact = (selectedContact: ContactOption) => {
-    setInviteName(selectedContact.name);
-    setInvitePhone(selectedContact.phone);
-    setContactsVisible(false);
-    setInfoText(`Selected ${selectedContact.name}. You can now send invite.`);
-  };
-
-  const requestContactsForInvite = async (): Promise<"granted" | "denied"> => {
-    setErrorText("");
-    setContactsLoading(true);
-
-    const permission = await Contacts.requestPermissionsAsync();
-    if (permission.status !== "granted") {
-      setContactsPermission("denied");
-      setContactsLoading(false);
-      return "denied";
-    }
-
-    const contactsResult = await Contacts.getContactsAsync({
-      fields: [Contacts.Fields.PhoneNumbers],
-      pageSize: 200,
-    });
-
-    const seen = new Set<string>();
-    const mappedContacts: ContactOption[] = (contactsResult.data || [])
-      .map((contact, index) => {
-        const phoneValue = contact.phoneNumbers?.[0]?.number ?? "";
-        return {
-          id: contact.id ?? `contact_${index}`,
-          name: contact.name || "Unnamed contact",
-          phone: normalizePhone(phoneValue),
-        };
-      })
-      .filter((contact) => {
-        if (contact.phone.length < 10 || seen.has(contact.phone)) {
-          return false;
-        }
-        seen.add(contact.phone);
-        return true;
-      })
-      .sort((a, b) => a.name.localeCompare(b.name));
-
-    setContactOptions(mappedContacts);
-    setContactsPermission("granted");
-    setContactsLoading(false);
-    return "granted";
-  };
-
-  const inviteContacts = async (
-    selectedContacts: ContactOption[],
-  ): Promise<number> => {
-    setErrorText("");
-    setInfoText("");
-
-    if (!clubId) {
-      setErrorText("Create a club first.");
-      return 0;
-    }
-    if (!currentMemberId) {
-      setErrorText("Unable to resolve your membership role. Please re-login.");
-      return 0;
-    }
-    if (selectedContacts.length === 0) {
-      return 0;
-    }
-
-    setLoading(true);
-
-    const expiresAt = new Date(
-      Date.now() + 7 * 24 * 60 * 60 * 1000,
-    ).toISOString();
-
-    let invitedCount = 0;
-    const seenPhones = new Set<string>();
-
-    for (const contact of selectedContacts) {
-      const normalizedPhone = normalizePhone(contact.phone);
-      if (normalizedPhone.length < 10 || seenPhones.has(normalizedPhone)) {
-        continue;
-      }
-      seenPhones.add(normalizedPhone);
-
-      const { data: existingMember } = await supabase
-        .from("members")
-        .select("id")
-        .eq("club_id", clubId)
-        .eq("phone", normalizedPhone)
-        .in("membership_status", ["invited", "active", "suspended"])
-        .limit(1);
-
-      if (existingMember && existingMember.length > 0) {
-        continue;
-      }
-
-      const token = `invite_${Date.now()}_${Math.random()
-        .toString(36)
-        .slice(2, 10)}`;
-
-      const { data: invitedMemberRow, error: invitedMemberCreateError } =
-        await supabase
-          .from("members")
-          .insert({
-            club_id: clubId,
-            user_id: null,
-            name: contact.name.trim() || "Invited member",
-            email: null,
-            phone: normalizedPhone,
-            role: "member",
-            membership_status: "invited",
-            is_active: true,
-          })
-          .select("id")
-          .single();
-
-      if (invitedMemberCreateError || !invitedMemberRow) {
-        continue;
-      }
-
-      const { error: inviteError } = await supabase
-        .from("club_invites")
-        .insert({
-          club_id: clubId,
-          invited_phone: normalizedPhone,
-          invited_email: null,
-          token,
-          invited_by: currentMemberId,
-          expires_at: expiresAt,
-        });
-
-      if (inviteError) {
-        await supabase.from("members").delete().eq("id", invitedMemberRow.id);
-        continue;
-      }
-
-      invitedCount += 1;
-    }
-
-    await Promise.all([loadInvites(clubId), loadMembers(clubId)]);
-    setLoading(false);
-
-    if (invitedCount > 0) {
-      setInfoText(
-        invitedCount === 1
-          ? "Invite sent. They'll appear as invited until they join."
-          : `${invitedCount} invites sent. They'll appear as invited until they join.`,
-      );
-    } else {
-      setInfoText(
-        "No new invites sent — those contacts are already in the club.",
-      );
-    }
-
-    return invitedCount;
-  };
-
   const resumeOnboarding = (request: MembershipRequest) => {
     if (!request.memberId) {
       setErrorText(
@@ -3212,87 +1480,42 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     navigate("club");
   };
 
-  const value: ClubOsContextValue = {
-    phone,
-    setPhone,
-    otp,
-    setOtp,
-    otpSent,
-    clubName,
-    setClubName,
-    clubDescription,
-    setClubDescription,
-    members,
-    invites,
-    membershipRequests,
-    myClubs,
-    memberDues,
-    duesSummary,
-    duesLoading,
-    duesPlans,
-    duesCycles,
-    ledgerEntries,
-    canManageDues,
-    meetings,
-    polls,
-    announcements,
-    activityLoading,
-    canManageActivities,
-    currentRole,
-    currentMemberId,
-    invitePhone,
-    setInvitePhone,
-    inviteName,
-    setInviteName,
-    inviteEmail,
-    setInviteEmail,
-    contactOptions,
-    contactsVisible,
-    setContactsVisible,
-    contactsLoading,
-    contactsPermission,
-    pendingClubName,
-    onboardName,
-    setOnboardName,
-    onboardEmail,
-    setOnboardEmail,
-    onboardLocation,
-    setOnboardLocation,
-    onboardSkills,
-    setOnboardSkills,
-    onboardAvatarUrl,
-    uploadingAvatar,
-    pickAndUploadAvatar,
-    clubLogoUrl,
-    uploadingClubLogo,
-    pickAndUploadClubLogo,
-    loading,
-    toast,
+  // Stable identities for every action. The proxy keeps each function's
+  // identity constant for the provider's lifetime while always invoking the
+  // latest closure, so the memoized context values below depend only on their
+  // own domain state — a change in one domain can't bust another's memo.
+  const api = useStableApi({
     notify,
     dismissToast,
-    session,
-    clubId,
-    activeClubName,
-    paidCount,
-    unpaidCount,
-    collectionPercent,
     navigate,
+    goHome,
     sendOtp,
     verifyOtpAndContinue,
+    logout,
+    pickAndUploadAvatar,
+    resendEmailVerification,
+    saveProfile,
+    loadMyProfile,
     completeBasicProfile,
     completeMemberOnboarding,
-    acceptMembershipRequest,
-    declineMembershipRequest,
-    declineInviteFromHome,
+    pickAndUploadClubLogo,
     createClub,
+    startCreateClub,
+    openClub,
+    switchClub,
+    loadClubProfile,
+    updateClubProfile,
     inviteMember,
     loadContacts,
     selectContact,
     requestContactsForInvite,
     inviteContacts,
-    goHome,
-    openClub,
-    switchClub,
+    updateMemberRole,
+    leaveClub,
+    acceptMembershipRequest,
+    declineMembershipRequest,
+    declineInviteFromHome,
+    resumeOnboarding,
     refreshDues,
     createDuesPlan,
     updateDuesPlan,
@@ -3312,21 +1535,226 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     closePoll,
     createAnnouncement,
     setAnnouncementRead,
-    resumeOnboarding,
-    startCreateClub,
-    loadClubProfile,
-    loadMyProfile,
-    updateClubProfile,
-    updateMemberRole,
-    saveProfile,
-    resendEmailVerification,
-    emailVerified,
-    emailPending,
-    leaveClub,
-    logout,
-  };
+  });
+
+  const uiValue = useMemo<UiContextValue>(() => ({ loading }), [loading]);
+
+  const toastValue = useMemo<ToastContextValue>(
+    () => ({ toast, notify: api.notify, dismissToast: api.dismissToast }),
+    [toast, api],
+  );
+
+  const navigationValue = useMemo<NavigationContextValue>(
+    () => ({ navigate: api.navigate, goHome: api.goHome }),
+    [api],
+  );
+
+  const authValue = useMemo<AuthContextValue>(
+    () => ({
+      phone,
+      setPhone,
+      otp,
+      setOtp,
+      otpSent,
+      session,
+      sendOtp: api.sendOtp,
+      verifyOtpAndContinue: api.verifyOtpAndContinue,
+      logout: api.logout,
+    }),
+    [phone, otp, otpSent, session, api],
+  );
+
+  const profileValue = useMemo<ProfileContextValue>(
+    () => ({
+      onboardName,
+      setOnboardName,
+      onboardEmail,
+      setOnboardEmail,
+      onboardLocation,
+      setOnboardLocation,
+      onboardSkills,
+      setOnboardSkills,
+      onboardAvatarUrl,
+      uploadingAvatar,
+      pickAndUploadAvatar: api.pickAndUploadAvatar,
+      emailVerified,
+      emailPending,
+      resendEmailVerification: api.resendEmailVerification,
+      saveProfile: api.saveProfile,
+      loadMyProfile: api.loadMyProfile,
+      completeBasicProfile: api.completeBasicProfile,
+      completeMemberOnboarding: api.completeMemberOnboarding,
+    }),
+    [
+      onboardName,
+      onboardEmail,
+      onboardLocation,
+      onboardSkills,
+      onboardAvatarUrl,
+      uploadingAvatar,
+      emailVerified,
+      emailPending,
+      api,
+    ],
+  );
+
+  const clubsValue = useMemo<ClubsContextValue>(
+    () => ({
+      myClubs,
+      clubId,
+      activeClubName,
+      clubName,
+      setClubName,
+      clubDescription,
+      setClubDescription,
+      clubLogoUrl,
+      uploadingClubLogo,
+      pickAndUploadClubLogo: api.pickAndUploadClubLogo,
+      createClub: api.createClub,
+      startCreateClub: api.startCreateClub,
+      openClub: api.openClub,
+      switchClub: api.switchClub,
+      loadClubProfile: api.loadClubProfile,
+      updateClubProfile: api.updateClubProfile,
+    }),
+    [
+      myClubs,
+      clubId,
+      activeClubName,
+      clubName,
+      clubDescription,
+      clubLogoUrl,
+      uploadingClubLogo,
+      api,
+    ],
+  );
+
+  const membersValue = useMemo<MembersContextValue>(
+    () => ({
+      members,
+      currentRole,
+      currentMemberId,
+      invites,
+      membershipRequests,
+      pendingClubName,
+      invitePhone,
+      setInvitePhone,
+      inviteName,
+      setInviteName,
+      inviteEmail,
+      setInviteEmail,
+      contactOptions,
+      contactsVisible,
+      setContactsVisible,
+      contactsLoading,
+      contactsPermission,
+      inviteMember: api.inviteMember,
+      loadContacts: api.loadContacts,
+      selectContact: api.selectContact,
+      requestContactsForInvite: api.requestContactsForInvite,
+      inviteContacts: api.inviteContacts,
+      updateMemberRole: api.updateMemberRole,
+      leaveClub: api.leaveClub,
+      acceptMembershipRequest: api.acceptMembershipRequest,
+      declineMembershipRequest: api.declineMembershipRequest,
+      declineInviteFromHome: api.declineInviteFromHome,
+      resumeOnboarding: api.resumeOnboarding,
+    }),
+    [
+      members,
+      currentRole,
+      currentMemberId,
+      invites,
+      membershipRequests,
+      pendingClubName,
+      invitePhone,
+      inviteName,
+      inviteEmail,
+      contactOptions,
+      contactsVisible,
+      contactsLoading,
+      contactsPermission,
+      api,
+    ],
+  );
+
+  const duesValue = useMemo<DuesContextValue>(
+    () => ({
+      memberDues,
+      duesSummary,
+      duesLoading,
+      duesPlans,
+      duesCycles,
+      ledgerEntries,
+      canManageDues,
+      paidCount,
+      unpaidCount,
+      collectionPercent,
+      refreshDues: api.refreshDues,
+      createDuesPlan: api.createDuesPlan,
+      updateDuesPlan: api.updateDuesPlan,
+      createDuesCycle: api.createDuesCycle,
+      updateDuesCycle: api.updateDuesCycle,
+      generateDues: api.generateDues,
+      ensureAutoDuesCycles: api.ensureAutoDuesCycles,
+      recordTransaction: api.recordTransaction,
+      startDuePayment: api.startDuePayment,
+      sendDuePaymentLinks: api.sendDuePaymentLinks,
+    }),
+    [
+      memberDues,
+      duesSummary,
+      duesLoading,
+      duesPlans,
+      duesCycles,
+      ledgerEntries,
+      canManageDues,
+      paidCount,
+      unpaidCount,
+      collectionPercent,
+      api,
+    ],
+  );
+
+  const activitiesValue = useMemo<ActivitiesContextValue>(
+    () => ({
+      meetings,
+      polls,
+      announcements,
+      activityLoading,
+      canManageActivities,
+      refreshActivities: api.refreshActivities,
+      createMeeting: api.createMeeting,
+      updateMeetingStatus: api.updateMeetingStatus,
+      updateMeeting: api.updateMeeting,
+      createPoll: api.createPoll,
+      castVote: api.castVote,
+      closePoll: api.closePoll,
+      createAnnouncement: api.createAnnouncement,
+      setAnnouncementRead: api.setAnnouncementRead,
+    }),
+    [meetings, polls, announcements, activityLoading, canManageActivities, api],
+  );
 
   return (
-    <ClubOsContext.Provider value={value}>{children}</ClubOsContext.Provider>
+    <UiContext.Provider value={uiValue}>
+      <ToastContext.Provider value={toastValue}>
+        <NavigationContext.Provider value={navigationValue}>
+          <AuthContext.Provider value={authValue}>
+            <ProfileContext.Provider value={profileValue}>
+              <ClubsContext.Provider value={clubsValue}>
+                <MembersContext.Provider value={membersValue}>
+                  <DuesContext.Provider value={duesValue}>
+                    <ActivitiesContext.Provider value={activitiesValue}>
+                      {children}
+                    </ActivitiesContext.Provider>
+                  </DuesContext.Provider>
+                </MembersContext.Provider>
+              </ClubsContext.Provider>
+            </ProfileContext.Provider>
+          </AuthContext.Provider>
+        </NavigationContext.Provider>
+      </ToastContext.Provider>
+    </UiContext.Provider>
   );
 }

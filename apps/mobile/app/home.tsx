@@ -1,19 +1,17 @@
 import { Image, Pressable, Text, View } from "react-native";
 import { styles } from "../src/styles";
-import { useClubOs } from "../src/ClubOsContext";
+import { useClubs, useMembers, useUi } from "../src/context/domainHooks";
 import { AppButton } from "../src/components/AppButton";
 import { OnboardingShell } from "../src/components/OnboardingShell";
 
 export default function HomeScreen() {
+  const { myClubs, openClub, startCreateClub } = useClubs();
   const {
-    myClubs,
     membershipRequests,
-    loading,
-    openClub,
-    startCreateClub,
     acceptMembershipRequest,
     declineInviteFromHome,
-  } = useClubOs();
+  } = useMembers();
+  const { loading } = useUi();
 
   const pendingInvites = membershipRequests.filter(
     (request) => request.status === "pending",

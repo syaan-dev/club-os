@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { styles, colors } from "../src/styles";
-import { useClubOs } from "../src/ClubOsContext";
+import { useAuth } from "../src/context/domainHooks";
 import { AppButton } from "../src/components/AppButton";
 import { Logo } from "../src/components/Logo";
 
@@ -25,7 +25,7 @@ export default function OtpScreen() {
     loading,
     sendOtp,
     verifyOtpAndContinue,
-  } = useClubOs();
+  } = useAuth();
 
   const submitDisabled =
     loading || phone.length < 8 || (otpSent && otp.length < 6);
