@@ -224,6 +224,120 @@ failed).
 
 ---
 
+## 11. `create-due-payment-link`
+
+Creates (or reuses) a Stripe **Payment Link** for a single member due and
+returns its hosted URL. Called with a **user JWT**.
+
+- **Auth:** the caller must be the due's own member **or** a manager
+  (owner/treasurer) of the due's club. Authorization is enforced first by RLS
+  (the due is read with the caller's JWT) and then re-checked in code.
+- **Idempotent:** if a `pending` link already exists for the due it is returned
+  as-is; otherwise one is created via the Stripe API and upserted into
+  `due_payment_links` (unique per `member_due_id`). The Stripe call uses an
+  `Idempotency-Key` of `due-link-<dueId>`.
+- **Amount** is always taken from the database (`amount - amount_paid`), never
+  the client. Paid/waived/zero-remaining dues are rejected.
+
+**Request**
+```json
+{ "dueId": "<uuid>" }
+```
+**Response `200`**
+```json
+{ "url": "https://buy.stripe.com/..." }
+```
+Errors: `401` (no JWT), `403` (not owner/manager), `404` (due not found),
+`409` (due already paid/waived or nothing outstanding), `502` (Stripe request
+failed).
+
+## 12. `send-due-payment-links` (manager **or** system-to-system)
+
+Ensures a payment link exists for each target due and inserts a
+`dues_payment_link` notification (which fans out to push via the dispatch
+trigger) so members receive the link.
+
+- **Auth (two modes):**
+  - **System:** shared secret in `Authorization: Bearer
+    <PAYMENT_WEBHOOK_SECRET>`. The DB trigger `trg_member_due_payable` calls this
+    with `{ "dueId": ... }` when a due becomes pending/overdue. Deploy with
+    `--no-verify-jwt`.
+  - **Manager:** a user JWT belonging to an owner/treasurer of every club the
+    targeted dues belong to.
+- Reuses or creates each link the same way as `create-due-payment-link`.
+
+**Request** (one of)
+```json
+{ "cycleId": "<uuid>" }
+{ "dueIds": ["<uuid>", "<uuid>"] }
+{ "dueId": "<uuid>" }
+```
+**Response `200`**
+```json
+{ "sent": 3, "links": [ { "dueId": "<uuid>", "url": "https://buy.stripe.com/..." } ] }
+```
+Errors: `401` (bad secret / no JWT), `403` (JWT not a manager for a target
+club), `404` (no payable dues matched), `502` (Stripe request failed).
+
+## 13. `stripe-webhook` (system-to-system)
+
+Receives Stripe events, verifies the signature, and reconciles completed
+payments. **Not called with a user JWT** — Stripe POSTs directly. Deploy with
+`--no-verify-jwt`.
+
+- **Auth:** the raw request body is verified against the
+  `Stripe-Signature` header using `STRIPE_WEBHOOK_SECRET` (HMAC-SHA256, 5-minute
+  tolerance).
+- **Idempotent:** each `event.id` is inserted into `processed_stripe_events`; a
+  duplicate is acknowledged with `200` without re-processing. If reconciliation
+  fails the row is removed and `500` is returned so Stripe retries.
+- On `checkout.session.completed` it reads `metadata.dueId`, `amount_total`,
+  `payment_intent`, and the session id, then calls the
+  `record_gateway_due_payment` RPC (service role) which marks the due paid,
+  inserts a `transactions` ledger row (source `gateway`, method `stripe`),
+  flips the `due_payment_links` row to `paid`, and notifies the member
+  (`dues_paid`). The RPC is itself idempotent on the payment intent.
+
+**Request:** raw Stripe event JSON (handled verbatim — do not pre-parse).
+
+**Response `200`**
+```json
+{ "received": true }
+```
+Errors: `400` (missing/invalid signature), `500` (reconciliation failed — Stripe
+will retry).
+
+### Required environment / configuration (Stripe)
+
+- Function env (set via `supabase secrets set`):
+  - `STRIPE_SECRET_KEY` — Stripe API secret (India account, INR).
+  - `STRIPE_WEBHOOK_SECRET` — signing secret of the webhook endpoint registered
+    for `checkout.session.completed`.
+  - `PAYMENT_WEBHOOK_SECRET` — shared secret guarding `send-due-payment-links`;
+    must equal the Vault `payment_webhook_secret` below.
+  - `PAYMENT_SUCCESS_URL` *(optional)* — hosted page Stripe redirects to after
+    payment.
+  - `STRIPE_PAYMENT_METHOD_TYPES` *(optional, CSV)* — overrides the link's
+    payment methods. Omit to use the Stripe account's default payment-method
+    configuration (enable **UPI + cards** there).
+- Database (once): add the trigger secret to **Supabase Vault** alongside the
+  push ones: `select vault.create_secret('<same value as
+  PAYMENT_WEBHOOK_SECRET>', 'payment_webhook_secret');`. `trg_member_due_payable`
+  reads `edge_url` + `payment_webhook_secret` from `vault.decrypted_secrets`; if
+  `edge_url` is unset (local/test) it no-ops.
+- Stripe dashboard: enable UPI and card payment methods on the account's default
+  payment-method configuration, and register the webhook endpoint
+  `https://<ref>.functions.supabase.co/stripe-webhook` for
+  `checkout.session.completed`.
+
+> **Payment-method configuration note:** Stripe **Payment Links** use the
+> account's *default* payment-method configuration rather than a per-link
+> configuration ID. To target a specific `payment_method_configuration` you would
+> have to switch to Checkout Sessions; the current implementation relies on the
+> account-level UPI + card configuration.
+
+---
+
 ## Local development
 
 

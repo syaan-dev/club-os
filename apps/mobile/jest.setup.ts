@@ -8,6 +8,17 @@ jest.mock("expo-device", () => ({
   isDevice: false,
 }));
 
+jest.mock("expo-web-browser", () => ({
+  openBrowserAsync: jest.fn(async () => ({ type: "dismiss" })),
+}));
+
+jest.mock("expo-image-picker", () => ({
+  requestMediaLibraryPermissionsAsync: jest.fn(async () => ({
+    granted: false,
+  })),
+  launchImageLibraryAsync: jest.fn(async () => ({ canceled: true })),
+}));
+
 jest.mock("expo-notifications", () => ({
   setNotificationHandler: jest.fn(),
   getPermissionsAsync: jest.fn(async () => ({

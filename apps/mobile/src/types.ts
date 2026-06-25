@@ -17,6 +17,9 @@ export type Member = {
   duesPaid: boolean;
   status: "invited" | "active" | "suspended" | "left";
   phone?: string;
+  avatarUrl?: string;
+  location?: string;
+  skills?: string;
 };
 
 export type Invite = {
@@ -49,6 +52,7 @@ export type MyClub = {
   name: string;
   description: string;
   role: Member["role"];
+  logoUrl?: string;
 };
 
 export type DueStatus = "pending" | "paid" | "overdue" | "waived";
@@ -104,6 +108,7 @@ export type LedgerEntry = {
   category: string;
   paymentMethod: string;
   description: string | null;
+  memberName: string | null;
   createdAt: string;
 };
 

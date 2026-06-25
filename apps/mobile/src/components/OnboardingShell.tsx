@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { styles, colors } from "../styles";
-import { useClubOs } from "../ClubOsContext";
+import { useAuth } from "../context/domainHooks";
 import { Logo } from "./Logo";
 
 // Onboarding scaffold sharing the sign-in screen theme: brand logo on top,
@@ -24,7 +24,7 @@ export function OnboardingShell({
   children: ReactNode;
   showLoading?: boolean;
 }) {
-  const { session, loading, logout } = useClubOs();
+  const { session, loading, logout } = useAuth();
 
   return (
     <SafeAreaView style={styles.authSafe}>

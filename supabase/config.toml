@@ -160,7 +160,8 @@ site_url = "http://127.0.0.1:3000"
 # The public URL that Auth serves on. Defaults to the API external URL with `/auth/v1` appended.
 # external_url = ""
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# `clubos://verify-email` lets the email-confirmation link deep-link back into the mobile app.
+additional_redirect_urls = ["https://127.0.0.1:3000", "clubos://verify-email"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -289,10 +290,10 @@ max_frequency = "5s"
 # Configure one of the supported SMS providers: `twilio`, `twilio_verify`, `messagebird`, `textlocal`, `vonage`.
 [auth.sms.twilio]
 enabled = true
-account_sid = "local-test-sid"
-message_service_sid = "local-test-msid"
+account_sid = "env(TWILIO_ACCOUNT_SID)"
+message_service_sid = "env(TWILIO_MESSAGE_SERVICE_SID)"
 # DO NOT commit your Twilio auth token to git. Use environment variable substitution instead:
-auth_token = "local-test-token"
+auth_token = "env(TWILIO_AUTH_TOKEN)"
 
 # Multi-factor-authentication is available to Supabase Pro plan.
 [auth.mfa]
@@ -371,6 +372,15 @@ enabled = false
 authorization_url_path = "/oauth/consent"
 # Allow dynamic client registration
 allow_dynamic_registration = false
+
+# Stripe webhook is authenticated by the Stripe signature, not a user JWT.
+[functions.stripe-webhook]
+verify_jwt = false
+
+# send-due-payment-links accepts the database trigger's shared secret in
+# addition to a manager JWT, so the platform JWT gate must be off.
+[functions.send-due-payment-links]
+verify_jwt = false
 
 [edge_runtime]
 enabled = true

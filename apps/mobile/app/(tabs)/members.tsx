@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
+  Image,
   Modal,
   Pressable,
   Share,
@@ -9,7 +10,7 @@ import {
   View,
 } from "react-native";
 import { styles } from "../../src/styles";
-import { useClubOs } from "../../src/ClubOsContext";
+import { useMembers, useUi } from "../../src/context/domainHooks";
 import type { Member } from "../../src/types";
 import { AppButton } from "../../src/components/AppButton";
 import { TabScreenShell } from "../../src/components/TabScreenShell";
@@ -44,8 +45,8 @@ export default function MembersScreen() {
     currentRole,
     currentMemberId,
     updateMemberRole,
-    loading,
-  } = useClubOs();
+  } = useMembers();
+  const { loading } = useUi();
 
   const canInvite = currentRole === "Owner" || currentRole === "Treasurer";
   // Owner, Treasurer and Secretary can reassign member roles.
@@ -152,13 +153,27 @@ export default function MembersScreen() {
                 }
               >
                 <View style={styles.memberAvatar}>
-                  <Text style={styles.memberAvatarText}>
-                    {initialsFor(item.name)}
-                  </Text>
+                  {item.avatarUrl ? (
+                    <Image
+                      source={{ uri: item.avatarUrl }}
+                      style={styles.memberAvatarImage}
+                    />
+                  ) : (
+                    <Text style={styles.memberAvatarText}>
+                      {initialsFor(item.name)}
+                    </Text>
+                  )}
                 </View>
-                <Text style={styles.directoryName} numberOfLines={1}>
-                  {item.name}
-                </Text>
+                <View style={styles.directoryNameCol}>
+                  <Text style={styles.directoryName} numberOfLines={1}>
+                    {item.name}
+                  </Text>
+                  {item.skills || item.location ? (
+                    <Text style={styles.directoryMeta} numberOfLines={1}>
+                      {item.skills || item.location}
+                    </Text>
+                  ) : null}
+                </View>
                 <View style={styles.roleChip}>
                   <Text style={styles.roleChipText}>{roleChipLabel(item)}</Text>
                 </View>

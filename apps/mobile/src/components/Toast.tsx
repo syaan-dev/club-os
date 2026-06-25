@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import { Animated, Pressable, Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, styles } from "../styles";
-import { useClubOs } from "../ClubOsContext";
+import { useToast } from "../context/domainHooks";
 
 const AUTO_DISMISS_MS = 3200;
 
@@ -30,7 +30,7 @@ const iconFor = (kind: "success" | "error" | "info") => {
 // Driven entirely by ClubOsContext's `toast` so any screen gets feedback for
 // free without per-screen wiring.
 export function Toast() {
-  const { toast, dismissToast } = useClubOs();
+  const { toast, dismissToast } = useToast();
   const insets = useSafeAreaInsets();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(20)).current;

@@ -1,7 +1,15 @@
 import { useState } from "react";
-import { Alert, Modal, Pressable, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Image,
+  Modal,
+  Pressable,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { styles } from "../../src/styles";
-import { useClubOs } from "../../src/ClubOsContext";
+import { useClubs, useMembers, useProfile, useAuth, useUi } from "../../src/context/domainHooks";
 import { AppButton } from "../../src/components/AppButton";
 import { TabScreenShell } from "../../src/components/TabScreenShell";
 
@@ -36,7 +44,18 @@ function SetupRow({
 export default function SetupScreen() {
   const {
     activeClubName,
-    currentRole,
+    clubName,
+    setClubName,
+    clubDescription,
+    setClubDescription,
+    clubLogoUrl,
+    uploadingClubLogo,
+    pickAndUploadClubLogo,
+    loadClubProfile,
+    updateClubProfile,
+  } = useClubs();
+  const { currentRole, leaveClub } = useMembers();
+  const {
     onboardName,
     setOnboardName,
     onboardEmail,
@@ -45,18 +64,17 @@ export default function SetupScreen() {
     setOnboardLocation,
     onboardSkills,
     setOnboardSkills,
-    clubName,
-    setClubName,
-    clubDescription,
-    setClubDescription,
-    loadClubProfile,
+    onboardAvatarUrl,
+    uploadingAvatar,
+    pickAndUploadAvatar,
     loadMyProfile,
-    updateClubProfile,
     saveProfile,
-    leaveClub,
-    logout,
-    loading,
-  } = useClubOs();
+    resendEmailVerification,
+    emailVerified,
+    emailPending,
+  } = useProfile();
+  const { logout } = useAuth();
+  const { loading } = useUi();
 
   const isOwner = currentRole === "Owner";
   // Club profile, roles & permissions and billing are leadership-only.
@@ -156,6 +174,31 @@ export default function SetupScreen() {
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Club profile</Text>
+            <Pressable
+              style={styles.avatarPicker}
+              onPress={pickAndUploadClubLogo}
+              disabled={uploadingClubLogo}
+              accessibilityRole="button"
+              accessibilityLabel="Change club logo"
+            >
+              <View style={styles.avatarPickerCircle}>
+                {clubLogoUrl ? (
+                  <Image
+                    source={{ uri: clubLogoUrl }}
+                    style={styles.avatarPickerImage}
+                  />
+                ) : (
+                  <Text style={styles.avatarPickerGlyph}>＋</Text>
+                )}
+              </View>
+              <Text style={styles.avatarPickerHint}>
+                {uploadingClubLogo
+                  ? "Uploading…"
+                  : clubLogoUrl
+                    ? "Change logo"
+                    : "Add logo"}
+              </Text>
+            </Pressable>
             <Text style={styles.sheetLabel}>Club name</Text>
             <TextInput
               value={clubName}
@@ -196,6 +239,31 @@ export default function SetupScreen() {
           <Pressable style={styles.sheet} onPress={() => {}}>
             <View style={styles.sheetHandle} />
             <Text style={styles.sheetTitle}>Your profile</Text>
+            <Pressable
+              style={styles.avatarPicker}
+              onPress={pickAndUploadAvatar}
+              disabled={uploadingAvatar}
+              accessibilityRole="button"
+              accessibilityLabel="Change your profile photo"
+            >
+              <View style={styles.avatarPickerCircle}>
+                {onboardAvatarUrl ? (
+                  <Image
+                    source={{ uri: onboardAvatarUrl }}
+                    style={styles.avatarPickerImage}
+                  />
+                ) : (
+                  <Text style={styles.avatarPickerGlyph}>＋</Text>
+                )}
+              </View>
+              <Text style={styles.avatarPickerHint}>
+                {uploadingAvatar
+                  ? "Uploading…"
+                  : onboardAvatarUrl
+                    ? "Change photo"
+                    : "Add photo"}
+              </Text>
+            </Pressable>
             <Text style={styles.sheetLabel}>Name</Text>
             <TextInput
               value={onboardName}
@@ -214,6 +282,31 @@ export default function SetupScreen() {
               autoCapitalize="none"
               style={styles.input}
             />
+            {onboardEmail.trim().length > 0 ? (
+              emailVerified ? (
+                <View style={styles.emailStatusRow}>
+                  <Text style={styles.emailStatusVerified}>✓ Email verified</Text>
+                </View>
+              ) : (
+                <View style={styles.emailStatusRow}>
+                  <Text style={styles.emailStatusPending}>
+                    {emailPending
+                      ? "Verification pending — check your inbox."
+                      : "Email not verified yet."}
+                  </Text>
+                  <Pressable
+                    onPress={resendEmailVerification}
+                    disabled={loading}
+                    accessibilityRole="button"
+                    accessibilityLabel="Resend verification email"
+                  >
+                    <Text style={styles.emailStatusAction}>
+                      Resend link
+                    </Text>
+                  </Pressable>
+                </View>
+              )
+            ) : null}
             <Text style={styles.sheetLabel}>Location (optional)</Text>
             <TextInput
               value={onboardLocation}

@@ -1,15 +1,17 @@
 import { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 import { styles } from "../styles";
-import { useClubOs } from "../ClubOsContext";
+import { useClubs, useMembers } from "../context/domainHooks";
 import { ClubSwitchSheet } from "./ClubSwitchSheet";
 
 export function ClubHeader() {
-  const { activeClubName, currentRole, members } = useClubOs();
+  const { activeClubName, myClubs, clubId } = useClubs();
+  const { currentRole, members } = useMembers();
   const [sheetVisible, setSheetVisible] = useState(false);
 
   const name = activeClubName || "Select a club";
   const initial = name.charAt(0).toUpperCase();
+  const logoUrl = myClubs.find((club) => club.clubId === clubId)?.logoUrl;
   const memberCount = members.length;
   const subtitle =
     `${currentRole || "Member"}` +
@@ -26,7 +28,11 @@ export function ClubHeader() {
         accessibilityLabel="Switch club"
       >
         <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initial}</Text>
+          {logoUrl ? (
+            <Image source={{ uri: logoUrl }} style={styles.avatarImage} />
+          ) : (
+            <Text style={styles.avatarText}>{initial}</Text>
+          )}
         </View>
         <View style={{ flexShrink: 1 }}>
           <Text style={styles.headerClubName} numberOfLines={1}>

@@ -1,6 +1,6 @@
-import { Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { Image, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { styles } from "../styles";
-import { useClubOs } from "../ClubOsContext";
+import { useClubs, useNavigation } from "../context/domainHooks";
 
 export function ClubSwitchSheet({
   visible,
@@ -9,7 +9,8 @@ export function ClubSwitchSheet({
   visible: boolean;
   onClose: () => void;
 }) {
-  const { myClubs, clubId, switchClub, navigate } = useClubOs();
+  const { myClubs, clubId, switchClub } = useClubs();
+  const { navigate } = useNavigation();
 
   const handleSelect = async (targetClubId: string, name: string) => {
     onClose();
@@ -53,9 +54,16 @@ export function ClubSwitchSheet({
                     accessibilityLabel={`Switch to ${club.name}`}
                   >
                     <View style={styles.avatar}>
-                      <Text style={styles.avatarText}>
-                        {club.name.charAt(0).toUpperCase()}
-                      </Text>
+                      {club.logoUrl ? (
+                        <Image
+                          source={{ uri: club.logoUrl }}
+                          style={styles.avatarImage}
+                        />
+                      ) : (
+                        <Text style={styles.avatarText}>
+                          {club.name.charAt(0).toUpperCase()}
+                        </Text>
+                      )}
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.headerClubName}>{club.name}</Text>

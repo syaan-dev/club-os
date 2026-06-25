@@ -1,19 +1,17 @@
-import { Pressable, Text, View } from "react-native";
+import { Image, Pressable, Text, View } from "react-native";
 import { styles } from "../src/styles";
-import { useClubOs } from "../src/ClubOsContext";
+import { useClubs, useMembers, useUi } from "../src/context/domainHooks";
 import { AppButton } from "../src/components/AppButton";
 import { OnboardingShell } from "../src/components/OnboardingShell";
 
 export default function HomeScreen() {
+  const { myClubs, openClub, startCreateClub } = useClubs();
   const {
-    myClubs,
     membershipRequests,
-    loading,
-    openClub,
-    startCreateClub,
     acceptMembershipRequest,
     declineInviteFromHome,
-  } = useClubOs();
+  } = useMembers();
+  const { loading } = useUi();
 
   const pendingInvites = membershipRequests.filter(
     (request) => request.status === "pending",
@@ -36,6 +34,18 @@ export default function HomeScreen() {
               onPress={() => openClub(club.clubId, club.name)}
               disabled={loading}
             >
+              <View style={styles.clubRowLogo}>
+                {club.logoUrl ? (
+                  <Image
+                    source={{ uri: club.logoUrl }}
+                    style={styles.clubRowLogoImage}
+                  />
+                ) : (
+                  <Text style={styles.clubRowLogoText}>
+                    {club.name.charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </View>
               <View style={styles.clubRowText}>
                 <Text style={styles.memberName}>{club.name}</Text>
                 <Text style={styles.memberMeta}>{club.role}</Text>

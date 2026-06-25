@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { styles } from "../styles";
-import { useClubOs } from "../ClubOsContext";
+import { useMembers, useUi } from "../context/domainHooks";
 import type { ContactOption } from "../types";
 
 type SheetMode = "picker" | "denied" | "share";
@@ -53,8 +53,8 @@ export function InviteSheet({
     contactsPermission,
     requestContactsForInvite,
     inviteContacts,
-    loading,
-  } = useClubOs();
+  } = useMembers();
+  const { loading } = useUi();
 
   const [mode, setMode] = useState<SheetMode>("picker");
   const [query, setQuery] = useState("");
