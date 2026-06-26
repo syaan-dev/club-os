@@ -127,6 +127,50 @@ export const baseStyles = StyleSheet.create({
     fontWeight: "600",
     fontSize: 13,
   },
+  dateField: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    backgroundColor: colors.surfaceAlt,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  dateFieldText: {
+    fontSize: 16,
+    color: colors.textPrimary,
+  },
+  dateFieldPlaceholder: {
+    fontSize: 16,
+    color: colors.textMuted,
+  },
+  dateFieldIcon: {
+    fontSize: 16,
+  },
+  dateFieldClear: {
+    fontSize: 20,
+    color: colors.textMuted,
+    fontWeight: "600",
+  },
+  dateFieldPickerActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 4,
+    paddingBottom: 4,
+  },
+  dateFieldCancel: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    fontWeight: "600",
+  },
+  dateFieldDone: {
+    fontSize: 16,
+    color: colors.accent,
+    fontWeight: "700",
+  },
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "flex-start",

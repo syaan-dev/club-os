@@ -5,6 +5,7 @@ import { useDues } from "../../context/domainHooks";
 import { useUi } from "../../context/domainHooks";
 import type { DuesFrequency, DuesPlan } from "../../types";
 import { AppButton } from "../AppButton";
+import { DateField } from "../DateField";
 import { FREQUENCIES, frequencyLabel } from "./format";
 
 // Create / edit a dues plan (leadership only). Owns its own form state and
@@ -167,13 +168,11 @@ export function PlanFormModal({
 
             {planAutoGenerate ? (
               <>
-                <Text style={styles.fieldLabel}>Start date (YYYY-MM-DD)</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="2026-01-01"
-                  autoCapitalize="none"
+                <Text style={styles.fieldLabel}>Start date</Text>
+                <DateField
                   value={planStartDate}
-                  onChangeText={setPlanStartDate}
+                  onChange={setPlanStartDate}
+                  placeholder="Pick a start date"
                   accessibilityLabel="Auto billing start date"
                 />
                 <Text style={styles.memberMeta}>

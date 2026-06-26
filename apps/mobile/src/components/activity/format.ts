@@ -17,6 +17,25 @@ export const formatDateTime = (value: string) => {
   });
 };
 
+// Like formatDateTime but also includes the time of day. Used for meetings,
+// which are scheduled at a specific date and time.
+export const formatDateAndTime = (value: string) => {
+  if (!value) {
+    return "";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+};
+
 export const meetingStatusColor = (status: MeetingStatus) => {
   if (status === "completed") {
     return colors.accent;

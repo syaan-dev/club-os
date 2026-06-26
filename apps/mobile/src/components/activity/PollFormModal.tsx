@@ -3,6 +3,7 @@ import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-nativ
 import { styles } from "../../styles";
 import { useActivities, useUi } from "../../context/domainHooks";
 import { AppButton } from "../AppButton";
+import { DateField } from "../DateField";
 
 // Create a poll (leadership only). Owns its own option list + form state and
 // commits through the activities domain hook.
@@ -118,12 +119,12 @@ export function PollFormModal({
             ) : null}
 
             <Text style={styles.fieldLabel}>Closes on (optional)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="2026-06-30"
+            <DateField
               value={pollCloses}
-              onChangeText={setPollCloses}
+              onChange={setPollCloses}
+              placeholder="No close date"
               accessibilityLabel="Poll close date"
+              clearable
             />
 
             <AppButton

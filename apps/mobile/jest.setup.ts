@@ -19,6 +19,18 @@ jest.mock("expo-image-picker", () => ({
   launchImageLibraryAsync: jest.fn(async () => ({ canceled: true })),
 }));
 
+jest.mock("@react-native-community/datetimepicker", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  const MockDateTimePicker = (props: Record<string, unknown>) =>
+    React.createElement(View, props, null);
+  return {
+    __esModule: true,
+    default: MockDateTimePicker,
+    DateTimePickerAndroid: { open: jest.fn(), dismiss: jest.fn() },
+  };
+});
+
 jest.mock("expo-notifications", () => ({
   setNotificationHandler: jest.fn(),
   getPermissionsAsync: jest.fn(async () => ({

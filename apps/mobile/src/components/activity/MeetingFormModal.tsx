@@ -4,6 +4,7 @@ import { styles } from "../../styles";
 import { useActivities, useUi } from "../../context/domainHooks";
 import type { ClubMeeting } from "../../types";
 import { AppButton } from "../AppButton";
+import { DateField } from "../DateField";
 
 // Create / edit a meeting (leadership only). Owns its own form state and
 // commits through the activities domain hook.
@@ -33,7 +34,7 @@ export function MeetingFormModal({
       setMeetingTitle(editingMeeting.title);
       setMeetingDescription(editingMeeting.description ?? "");
       setMeetingLocation(editingMeeting.location ?? "");
-      setMeetingDate((editingMeeting.scheduledAt ?? "").slice(0, 10));
+      setMeetingDate(editingMeeting.scheduledAt ?? "");
     } else {
       setMeetingTitle("");
       setMeetingDescription("");
@@ -84,12 +85,12 @@ export function MeetingFormModal({
               accessibilityLabel="Meeting title"
             />
 
-            <Text style={styles.fieldLabel}>Date (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="2026-06-20"
+            <Text style={styles.fieldLabel}>Date &amp; time</Text>
+            <DateField
+              mode="datetime"
               value={meetingDate}
-              onChangeText={setMeetingDate}
+              onChange={setMeetingDate}
+              placeholder="Pick a date and time"
               accessibilityLabel="Meeting date"
             />
 

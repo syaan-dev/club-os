@@ -60,8 +60,11 @@ export function useActivityActions(deps: ActivityActionsDeps) {
       setErrorText("Meeting title is required.");
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.scheduledAt)) {
-      setErrorText("Date must be in YYYY-MM-DD format.");
+    if (
+      !input.scheduledAt ||
+      Number.isNaN(new Date(input.scheduledAt).getTime())
+    ) {
+      setErrorText("Please choose a meeting date and time.");
       return;
     }
 
@@ -144,8 +147,11 @@ export function useActivityActions(deps: ActivityActionsDeps) {
       setErrorText("Meeting title is required.");
       return;
     }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.scheduledAt)) {
-      setErrorText("Date must be in YYYY-MM-DD format.");
+    if (
+      !input.scheduledAt ||
+      Number.isNaN(new Date(input.scheduledAt).getTime())
+    ) {
+      setErrorText("Please choose a meeting date and time.");
       return;
     }
 

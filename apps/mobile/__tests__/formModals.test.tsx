@@ -63,9 +63,10 @@ describe("PlanFormModal re-seeding", () => {
     expect(view.getByLabelText("Plan amount").props.value).toBe("1500");
     expect(view.getByLabelText("Grace days").props.value).toBe("5");
     // Auto-generate plans reveal the start-date field, seeded from the plan.
-    expect(view.getByLabelText("Auto billing start date").props.value).toBe(
-      "2026-01-01",
-    );
+    expect(
+      view.getByLabelText("Auto billing start date").props.accessibilityValue
+        .text,
+    ).toBe("2026-01-01");
   });
 
   it("clears the form when switched from edit to create mode", async () => {
@@ -104,8 +105,10 @@ describe("MeetingFormModal re-seeding", () => {
     expect(view.getByLabelText("Meeting title").props.value).toBe(
       "Quarterly Review",
     );
-    // The date input shows just the YYYY-MM-DD slice of the timestamp.
-    expect(view.getByLabelText("Meeting date").props.value).toBe("2026-06-20");
+    // The date field is seeded from the meeting's full scheduled timestamp.
+    expect(
+      view.getByLabelText("Meeting date").props.accessibilityValue.text,
+    ).toBe("2026-06-20T18:00:00.000Z");
     expect(view.getByLabelText("Meeting location").props.value).toBe(
       "Clubhouse",
     );
@@ -133,7 +136,9 @@ describe("MeetingFormModal re-seeding", () => {
     await flush();
 
     expect(view.getByLabelText("Meeting title").props.value).toBe("");
-    expect(view.getByLabelText("Meeting date").props.value).toBe("");
+    expect(
+      view.getByLabelText("Meeting date").props.accessibilityValue.text,
+    ).toBe("");
     expect(view.getByLabelText("Meeting location").props.value).toBe("");
     expect(view.getByLabelText("Meeting agenda").props.value).toBe("");
   });

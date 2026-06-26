@@ -63,6 +63,7 @@ module.exports = () => {
               "Allow Club OS to access your photos to set a profile picture.",
           },
         ],
+        "@react-native-community/datetimepicker",
       ],
       experiments: {
         typedRoutes: true,

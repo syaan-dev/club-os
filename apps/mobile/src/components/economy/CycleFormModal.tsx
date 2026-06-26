@@ -13,6 +13,7 @@ import { useDues } from "../../context/domainHooks";
 import { useUi } from "../../context/domainHooks";
 import type { DuesCycle } from "../../types";
 import { AppButton } from "../AppButton";
+import { DateField } from "../DateField";
 
 // Create / edit a billing cycle (leadership only). Owns its own form state and
 // commits through the dues domain hook; the parent only toggles visibility.
@@ -121,13 +122,11 @@ export function CycleFormModal({
               accessibilityLabel="Cycle label"
             />
 
-            <Text style={styles.fieldLabel}>Due date (YYYY-MM-DD)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="2026-06-30"
-              autoCapitalize="none"
+            <Text style={styles.fieldLabel}>Due date</Text>
+            <DateField
               value={cycleDueDate}
-              onChangeText={setCycleDueDate}
+              onChange={setCycleDueDate}
+              placeholder="Pick a due date"
               accessibilityLabel="Due date"
             />
 

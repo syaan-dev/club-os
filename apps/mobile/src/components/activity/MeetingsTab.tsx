@@ -2,7 +2,7 @@ import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native
 import { colors, styles } from "../../styles";
 import { useActivities } from "../../context/domainHooks";
 import type { ClubMeeting } from "../../types";
-import { formatDateTime, meetingStatusColor } from "./format";
+import { formatDateAndTime, meetingStatusColor } from "./format";
 
 // "Meetings" tab: upcoming and past meeting lists with leadership-only
 // status/edit actions. Create/edit form lives in the parent.
@@ -31,7 +31,7 @@ export function MeetingsTab({
     <View style={{ paddingVertical: 10 }}>
       <Text style={styles.memberName}>{item.title}</Text>
       <Text style={styles.memberMeta}>
-        {formatDateTime(item.scheduledAt)}
+        {formatDateAndTime(item.scheduledAt)}
         {item.location ? ` \u00b7 ${item.location}` : ""}
       </Text>
       {item.description ? (
