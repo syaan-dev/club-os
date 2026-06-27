@@ -11,6 +11,7 @@ import type { Session } from "@supabase/supabase-js";
 
 import { supabase } from "../../lib/supabase";
 import { emailRedirectUrl } from "../lib/email";
+import { isValidEmail } from "../lib/format";
 
 type ProfileActionsDeps = {
   clubId: string;
@@ -56,6 +57,11 @@ export function useProfileActions(deps: ProfileActionsDeps) {
 
     if (!trimmedName || !trimmedEmail) {
       setErrorText("Name and email are required.");
+      return;
+    }
+
+    if (!isValidEmail(trimmedEmail)) {
+      setErrorText("Enter a valid email address.");
       return;
     }
 
@@ -118,6 +124,11 @@ export function useProfileActions(deps: ProfileActionsDeps) {
     const trimmedEmail = onboardEmail.trim().toLowerCase();
     if (!trimmedEmail) {
       setErrorText("Add an email address first.");
+      return;
+    }
+
+    if (!isValidEmail(trimmedEmail)) {
+      setErrorText("Enter a valid email address.");
       return;
     }
 

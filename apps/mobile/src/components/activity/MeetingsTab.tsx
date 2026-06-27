@@ -1,11 +1,45 @@
-import { ActivityIndicator, FlatList, Pressable, Text, View } from "react-native";
+import { useState } from "react";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { colors, styles } from "../../styles";
 import { useActivities } from "../../context/domainHooks";
-import type { ClubMeeting } from "../../types";
-import { formatDateAndTime, meetingStatusColor } from "./format";
+import type { ClubMeeting, MeetingRsvpResponse } from "../../types";
+import {
+  formatCountdown,
+  formatDateAndTime,
+  formatDateTime,
+  meetingStatusColor,
+} from "./format";
 
-// "Meetings" tab: upcoming and past meeting lists with leadership-only
-// status/edit actions. Create/edit form lives in the parent.
+// The three RSVP choices, with their active styling and button label.
+const RSVP_OPTIONS: {
+  value: MeetingRsvpResponse;
+  label: string;
+  activeStyle: object;
+  activeTextStyle: object;
+}[] = [
+  {
+    value: "yes",
+    label: "Going",
+    activeStyle: styles.rsvpButtonYes,
+    activeTextStyle: styles.rsvpButtonTextYes,
+  },
+  {
+    value: "no",
+    label: "Can't",
+    activeStyle: styles.rsvpButtonNo,
+    activeTextStyle: styles.rsvpButtonTextNo,
+  },
+  {
+    value: "maybe",
+    label: "Maybe",
+    activeStyle: styles.rsvpButtonMaybe,
+    activeTextStyle: styles.rsvpButtonTextMaybe,
+  },
+];
+
+// "Meetings" tab. Mirrors the polls triage: upcoming meetings that may want the
+// member's attention sit up top, while past meetings collapse into quiet
+// one-line history rows that expand on demand.
 export function MeetingsTab({
   onNewMeeting,
   onEditMeeting,
@@ -18,7 +52,10 @@ export function MeetingsTab({
     activityLoading,
     canManageActivities,
     updateMeetingStatus,
+    setMeetingRsvp,
   } = useActivities();
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const upcomingMeetings = meetings.filter(
     (meeting) => meeting.status === "scheduled",
@@ -27,66 +64,160 @@ export function MeetingsTab({
     (meeting) => meeting.status !== "scheduled",
   );
 
-  const renderMeetingItem = ({ item }: { item: ClubMeeting }) => (
-    <View style={{ paddingVertical: 10 }}>
-      <Text style={styles.memberName}>{item.title}</Text>
-      <Text style={styles.memberMeta}>
-        {formatDateAndTime(item.scheduledAt)}
-        {item.location ? ` \u00b7 ${item.location}` : ""}
-      </Text>
-      {item.description ? (
-        <Text style={styles.metaText}>{item.description}</Text>
-      ) : null}
-      <View style={[styles.statusPill, { backgroundColor: colors.surfaceAlt }]}>
-        <Text
-          style={[
-            styles.statusPillText,
-            { color: meetingStatusColor(item.status) },
-          ]}
-        >
-          {item.status}
-        </Text>
-      </View>
-      <Text style={styles.metaText}>Organised by {item.createdByName}</Text>
-      {canManageActivities && item.status === "scheduled" ? (
-        <View style={styles.rowActions}>
-          <Pressable
-            style={styles.inlineButton}
-            onPress={() => onEditMeeting(item)}
-            accessibilityRole="button"
-            accessibilityLabel={`Edit ${item.title}`}
-          >
-            <Text style={styles.inlineButtonText}>Edit</Text>
-          </Pressable>
-          <Pressable
-            style={styles.inlineButton}
-            onPress={() => updateMeetingStatus(item.id, "completed")}
-            accessibilityRole="button"
-            accessibilityLabel={`Mark ${item.title} completed`}
-          >
-            <Text style={styles.inlineButtonText}>Mark completed</Text>
-          </Pressable>
-          <Pressable
-            style={styles.inlineButton}
-            onPress={() => updateMeetingStatus(item.id, "cancelled")}
-            accessibilityRole="button"
-            accessibilityLabel={`Cancel ${item.title}`}
-          >
-            <Text style={styles.inlineButtonText}>Cancel</Text>
-          </Pressable>
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+
+  const renderUpcomingMeeting = (meeting: ClubMeeting) => {
+    const countdown = formatCountdown(meeting.scheduledAt);
+    const { yes, no, maybe } = meeting.rsvpCounts;
+    const totalRsvps = yes + no + maybe;
+    return (
+      <View key={meeting.id} style={styles.activeCard}>
+        <View style={styles.activeCardTop}>
+          <View style={styles.openPill}>
+            <Text style={styles.openPillText}>Upcoming</Text>
+          </View>
+          {countdown ? (
+            <View style={styles.countdownRow}>
+              <Text style={styles.countdownText}>
+                {"\uD83D\uDD52"} {countdown}
+              </Text>
+            </View>
+          ) : null}
         </View>
-      ) : null}
-    </View>
-  );
+        <Text style={styles.itemQuestion}>{meeting.title}</Text>
+        <Text style={styles.itemMeta}>
+          {formatDateAndTime(meeting.scheduledAt)}
+          {meeting.location ? ` \u00b7 ${meeting.location}` : ""}
+        </Text>
+        {meeting.description ? (
+          <Text style={styles.metaText}>{meeting.description}</Text>
+        ) : null}
+
+        <View style={styles.rsvpRow}>
+          {RSVP_OPTIONS.map((option) => {
+            const active = meeting.myRsvp === option.value;
+            return (
+              <Pressable
+                key={option.value}
+                onPress={() => setMeetingRsvp(meeting.id, option.value)}
+                style={[styles.rsvpButton, active && option.activeStyle]}
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                accessibilityLabel={`RSVP ${option.label} to ${meeting.title}`}
+              >
+                <Text
+                  style={[
+                    styles.rsvpButtonText,
+                    active && option.activeTextStyle,
+                  ]}
+                >
+                  {active ? "\u2713 " : ""}
+                  {option.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.rsvpSummary}>
+          {totalRsvps === 0
+            ? "Be the first to RSVP"
+            : `${yes} going \u00b7 ${no} can't \u00b7 ${maybe} maybe`}
+        </Text>
+
+        <Text style={styles.organiserMeta}>
+          Organised by {meeting.createdByName}
+        </Text>
+        {canManageActivities ? (
+          <View style={styles.rowActions}>
+            <Pressable
+              style={styles.inlineButton}
+              onPress={() => onEditMeeting(meeting)}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit ${meeting.title}`}
+            >
+              <Text style={styles.inlineButtonText}>Edit</Text>
+            </Pressable>
+            <Pressable
+              style={styles.inlineButton}
+              onPress={() => updateMeetingStatus(meeting.id, "completed")}
+              accessibilityRole="button"
+              accessibilityLabel={`Mark ${meeting.title} completed`}
+            >
+              <Text style={styles.inlineButtonText}>Mark completed</Text>
+            </Pressable>
+            <Pressable
+              style={styles.inlineButton}
+              onPress={() => updateMeetingStatus(meeting.id, "cancelled")}
+              accessibilityRole="button"
+              accessibilityLabel={`Cancel ${meeting.title}`}
+            >
+              <Text style={styles.inlineButtonText}>Cancel</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  const renderPastMeeting = (meeting: ClubMeeting) => {
+    const isOpen = expanded[meeting.id];
+    return (
+      <View key={meeting.id}>
+        <Pressable
+          style={styles.collapsedRow}
+          onPress={() => toggleExpanded(meeting.id)}
+          accessibilityRole="button"
+          accessibilityLabel={`${meeting.title}, ${meeting.status}`}
+        >
+          <View style={styles.collapsedMain}>
+            <Text style={styles.collapsedTitle} numberOfLines={1}>
+              {meeting.title}
+            </Text>
+            <Text style={styles.collapsedMeta}>
+              {formatDateTime(meeting.scheduledAt)}
+            </Text>
+          </View>
+          <View style={styles.collapsedRight}>
+            <Text
+              style={[
+                styles.collapsedSummary,
+                { color: meetingStatusColor(meeting.status) },
+              ]}
+              accessibilityLabel={meeting.status}
+            >
+              {meeting.status === "completed" ? "\u2705" : meeting.status}
+            </Text>
+            <Text style={styles.collapsedChevron}>
+              {isOpen ? "\u2303" : "\u2304"}
+            </Text>
+          </View>
+        </Pressable>
+        {isOpen ? (
+          <View style={{ paddingBottom: 12 }}>
+            <Text style={styles.itemMeta}>
+              {formatDateAndTime(meeting.scheduledAt)}
+              {meeting.location ? ` \u00b7 ${meeting.location}` : ""}
+            </Text>
+            {meeting.description ? (
+              <Text style={styles.metaText}>{meeting.description}</Text>
+            ) : null}
+            <Text style={styles.metaText}>
+              Organised by {meeting.createdByName}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    );
+  };
+
+  const loadingFirst = activityLoading && meetings.length === 0;
 
   return (
     <View style={styles.card}>
       <View style={styles.sectionHeaderRow}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>Meetings</Text>
-          <Text style={styles.memberMeta}>
-            Schedule club meetings and track whether they happened.
-          </Text>
+          <Text style={styles.cardTitle}>Meetings</Text>          
         </View>
         {canManageActivities ? (
           <Pressable
@@ -100,34 +231,40 @@ export function MeetingsTab({
         ) : null}
       </View>
 
-      <Text style={styles.subTitle}>Upcoming</Text>
-      {activityLoading && meetings.length === 0 ? (
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionLabel}>Needs your RSVP</Text>
+        {upcomingMeetings.length > 0 ? (
+          <View style={styles.sectionCountBadge}>
+            <Text style={styles.sectionCountText}>
+              {upcomingMeetings.length}
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.sectionRule} />
+      </View>
+      {loadingFirst ? (
         <ActivityIndicator color={colors.accent} />
       ) : upcomingMeetings.length === 0 ? (
         <Text style={styles.memberMeta}>No upcoming meetings.</Text>
       ) : (
-        <FlatList
-          data={upcomingMeetings}
-          keyExtractor={(item) => item.id}
-          scrollEnabled={false}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          renderItem={renderMeetingItem}
-        />
+        upcomingMeetings.map(renderUpcomingMeeting)
       )}
 
-      <Text style={[styles.subTitle, { marginTop: 16 }]}>Past</Text>
-      {activityLoading && meetings.length === 0 ? (
+      <View style={styles.sectionHead}>
+        <Text style={styles.sectionLabel}>Past</Text>
+        {pastMeetings.length > 0 ? (
+          <View style={styles.sectionCountBadge}>
+            <Text style={styles.sectionCountText}>{pastMeetings.length}</Text>
+          </View>
+        ) : null}
+        <View style={styles.sectionRule} />
+      </View>
+      {loadingFirst ? (
         <ActivityIndicator color={colors.accent} />
       ) : pastMeetings.length === 0 ? (
         <Text style={styles.memberMeta}>No past meetings yet.</Text>
       ) : (
-        <FlatList
-          data={pastMeetings}
-          keyExtractor={(item) => item.id}
-          scrollEnabled={false}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          renderItem={renderMeetingItem}
-        />
+        pastMeetings.map(renderPastMeeting)
       )}
     </View>
   );

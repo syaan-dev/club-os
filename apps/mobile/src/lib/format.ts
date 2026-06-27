@@ -17,6 +17,24 @@ export function normalizePhone(value: string): string {
   return `+${digitsOnly}`;
 }
 
+// Validates an email address. Intentionally pragmatic (not RFC-exhaustive):
+// requires a single local part, an '@', and a domain with at least one dot,
+// and rejects any whitespace.
+export function isValidEmail(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed);
+}
+
+// Validates a phone number after E.164 normalization. Accepts a leading '+'
+// followed by 8–15 digits (ITU E.164 caps the total at 15 digits including the
+// country code).
+export function isValidPhone(value: string): boolean {
+  return /^\+\d{8,15}$/.test(normalizePhone(value));
+}
+
 // Builds the deep-link invite URL carrying the invite token + club name.
 export function buildInviteLink(token: string, club: string): string {
   return `clubos://join?token=${encodeURIComponent(token)}&club=${encodeURIComponent(club)}`;

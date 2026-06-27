@@ -48,6 +48,8 @@ const meeting: ClubMeeting = {
   scheduledAt: "2026-06-20T18:00:00.000Z",
   status: "scheduled",
   createdByName: "Mia",
+  myRsvp: null,
+  rsvpCounts: { yes: 0, no: 0, maybe: 0 },
 };
 
 describe("PlanFormModal re-seeding", () => {

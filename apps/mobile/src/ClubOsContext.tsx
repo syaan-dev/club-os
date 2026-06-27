@@ -26,7 +26,7 @@ import type {
   TransactionType,
 } from "./types";
 import { canManageFinances, deriveDuesSummary } from "./dues";
-import { buildInviteLink, isLeadership, mapRole, normalizePhone } from "./lib/format";
+import { buildInviteLink, isLeadership, isValidEmail, mapRole, normalizePhone } from "./lib/format";
 import { fetchMembershipRequests, fetchMyClubs } from "./data/clubs";
 import { fetchMembers } from "./data/members";
 import {
@@ -936,6 +936,11 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (!isValidEmail(trimmedEmail)) {
+      setErrorText("Enter a valid email address.");
+      return;
+    }
+
     setLoading(true);
     const needsEmailVerify =
       trimmedEmail !== (session?.user?.email ?? "").toLowerCase();
@@ -985,6 +990,11 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
 
     if (!trimmedName || !trimmedEmail) {
       setErrorText("Name and email are required to join the club.");
+      return;
+    }
+
+    if (!isValidEmail(trimmedEmail)) {
+      setErrorText("Enter a valid email address.");
       return;
     }
 

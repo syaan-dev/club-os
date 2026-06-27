@@ -1,6 +1,8 @@
 import {
   buildInviteLink,
   isLeadership,
+  isValidEmail,
+  isValidPhone,
   mapRole,
   normalizePhone,
 } from "../src/lib/format";
@@ -27,6 +29,40 @@ describe("normalizePhone", () => {
 
   it("does not force +91 for non-10-digit input", () => {
     expect(normalizePhone("12345")).toBe("+12345");
+  });
+});
+
+describe("isValidEmail", () => {
+  it("accepts well-formed addresses", () => {
+    expect(isValidEmail("user@example.com")).toBe(true);
+    expect(isValidEmail("first.last+tag@sub.domain.co")).toBe(true);
+    expect(isValidEmail("  spaced@example.com  ")).toBe(true);
+  });
+
+  it("rejects blank or malformed addresses", () => {
+    expect(isValidEmail("")).toBe(false);
+    expect(isValidEmail("   ")).toBe(false);
+    expect(isValidEmail("plainaddress")).toBe(false);
+    expect(isValidEmail("missing@dot")).toBe(false);
+    expect(isValidEmail("@no-local.com")).toBe(false);
+    expect(isValidEmail("no-domain@")).toBe(false);
+    expect(isValidEmail("two@@at.com")).toBe(false);
+    expect(isValidEmail("has space@example.com")).toBe(false);
+  });
+});
+
+describe("isValidPhone", () => {
+  it("accepts numbers that normalize to valid E.164", () => {
+    expect(isValidPhone("9876543210")).toBe(true);
+    expect(isValidPhone("+91 98765 43210")).toBe(true);
+    expect(isValidPhone("+1 415 555 2671")).toBe(true);
+  });
+
+  it("rejects blank or too-short/too-long numbers", () => {
+    expect(isValidPhone("")).toBe(false);
+    expect(isValidPhone("123")).toBe(false);
+    expect(isValidPhone("12345")).toBe(false);
+    expect(isValidPhone("1234567890123456")).toBe(false);
   });
 });
 

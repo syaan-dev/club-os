@@ -145,6 +145,7 @@ export type ActivitiesContextValue = Pick<
   | "createMeeting"
   | "updateMeetingStatus"
   | "updateMeeting"
+  | "setMeetingRsvp"
   | "createPoll"
   | "castVote"
   | "closePoll"

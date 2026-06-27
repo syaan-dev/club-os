@@ -184,6 +184,7 @@ export function useActivities() {
     createMeeting: c.createMeeting,
     updateMeetingStatus: c.updateMeetingStatus,
     updateMeeting: c.updateMeeting,
+    setMeetingRsvp: c.setMeetingRsvp,
     createPoll: c.createPoll,
     castVote: c.castVote,
     closePoll: c.closePoll,

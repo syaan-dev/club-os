@@ -9,7 +9,7 @@
 import type { Session } from "@supabase/supabase-js";
 
 import { isSupabaseConfigured, supabase } from "../../lib/supabase";
-import { normalizePhone } from "../lib/format";
+import { isValidPhone, normalizePhone } from "../lib/format";
 
 type AuthActionsDeps = {
   phone: string;
@@ -48,7 +48,7 @@ export function useAuthActions(deps: AuthActionsDeps) {
     }
 
     const normalizedPhone = normalizePhone(phone);
-    if (normalizedPhone.length < 10) {
+    if (!isValidPhone(normalizedPhone)) {
       setErrorText("Enter a valid phone number with country code.");
       return;
     }

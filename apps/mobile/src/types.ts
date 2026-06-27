@@ -114,6 +114,14 @@ export type LedgerEntry = {
 
 export type MeetingStatus = "scheduled" | "completed" | "cancelled";
 
+export type MeetingRsvpResponse = "yes" | "no" | "maybe";
+
+export type MeetingRsvpCounts = {
+  yes: number;
+  no: number;
+  maybe: number;
+};
+
 export type ClubMeeting = {
   id: string;
   title: string;
@@ -122,6 +130,8 @@ export type ClubMeeting = {
   scheduledAt: string;
   status: MeetingStatus;
   createdByName: string;
+  myRsvp: MeetingRsvpResponse | null;
+  rsvpCounts: MeetingRsvpCounts;
 };
 
 export type PollStatus = "open" | "closed";

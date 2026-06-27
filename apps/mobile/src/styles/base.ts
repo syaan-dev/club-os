@@ -34,7 +34,7 @@ export const baseStyles = StyleSheet.create({
     color: colors.textPrimary,
   },
   subTitle: {
-    marginTop: 6,
+    marginTop: 10,
     fontSize: 16,
     fontWeight: "700",
     color: colors.textPrimary,
@@ -67,7 +67,7 @@ export const baseStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingVertical: 6,
+    paddingVertical: 10,
   },
   memberName: {
     fontSize: 16,
@@ -75,11 +75,11 @@ export const baseStyles = StyleSheet.create({
     color: colors.textPrimary,
   },
   memberMeta: {
-    marginTop: 2,
+    marginTop: 4,
     color: colors.textSecondary,
   },
   rowActions: {
-    marginTop: 8,
+    marginTop: 14,
     gap: 8,
   },
   separator: {

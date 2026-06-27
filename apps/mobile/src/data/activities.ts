@@ -5,12 +5,18 @@ import { supabase } from "../../lib/supabase";
 import type {
   Announcement,
   ClubMeeting,
+  MeetingRsvpResponse,
   MeetingStatus,
   Poll,
   PollStatus,
 } from "../types";
 
-export async function fetchMeetings(clubId: string): Promise<ClubMeeting[]> {
+// Returns meetings with per-meeting RSVP tallies and the caller's own RSVP
+// (resolved via `myMemberId`).
+export async function fetchMeetings(
+  clubId: string,
+  myMemberId: string,
+): Promise<ClubMeeting[]> {
   const { data, error } = await supabase
     .from("club_meetings")
     .select("id,title,description,location,scheduled_at,status,members(name)")
@@ -21,8 +27,29 @@ export async function fetchMeetings(clubId: string): Promise<ClubMeeting[]> {
     return [];
   }
 
+  const meetingIds = data.map((row: any) => row.id);
+  let rsvps: any[] = [];
+  if (meetingIds.length > 0) {
+    const { data: rsvpData } = await supabase
+      .from("meeting_rsvps")
+      .select("meeting_id,response,member_id")
+      .in("meeting_id", meetingIds);
+    rsvps = rsvpData ?? [];
+  }
+
   return data.map((row: any) => {
     const creator = Array.isArray(row.members) ? row.members[0] : row.members;
+    const rsvpCounts = { yes: 0, no: 0, maybe: 0 };
+    let myRsvp: MeetingRsvpResponse | null = null;
+    for (const rsvp of rsvps) {
+      if (rsvp.meeting_id !== row.id) continue;
+      if (rsvp.response in rsvpCounts) {
+        rsvpCounts[rsvp.response as MeetingRsvpResponse] += 1;
+      }
+      if (myMemberId && rsvp.member_id === myMemberId) {
+        myRsvp = rsvp.response as MeetingRsvpResponse;
+      }
+    }
     return {
       id: row.id,
       title: row.title,
@@ -31,6 +58,8 @@ export async function fetchMeetings(clubId: string): Promise<ClubMeeting[]> {
       scheduledAt: row.scheduled_at ?? "",
       status: row.status as MeetingStatus,
       createdByName: creator?.name ?? "Someone",
+      myRsvp,
+      rsvpCounts,
     } satisfies ClubMeeting;
   });
 }

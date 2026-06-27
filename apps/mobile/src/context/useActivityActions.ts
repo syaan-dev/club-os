@@ -7,7 +7,13 @@
 
 import { supabase } from "../../lib/supabase";
 import { isLeadership } from "../lib/format";
-import type { Announcement, MeetingStatus, Member } from "../types";
+import type {
+  Announcement,
+  ClubMeeting,
+  MeetingRsvpResponse,
+  MeetingStatus,
+  Member,
+} from "../types";
 
 type ActivityActionsDeps = {
   clubId: string;
@@ -16,6 +22,7 @@ type ActivityActionsDeps = {
   setErrorText: (message: string) => void;
   setInfoText: (message: string) => void;
   setLoading: (value: boolean) => void;
+  setMeetings: React.Dispatch<React.SetStateAction<ClubMeeting[]>>;
   setAnnouncements: React.Dispatch<React.SetStateAction<Announcement[]>>;
   loadMeetings: (clubId: string) => Promise<void>;
   loadPolls: (clubId: string) => Promise<void>;
@@ -30,6 +37,7 @@ export function useActivityActions(deps: ActivityActionsDeps) {
     setErrorText,
     setInfoText,
     setLoading,
+    setMeetings,
     setAnnouncements,
     loadMeetings,
     loadPolls,
@@ -115,6 +123,61 @@ export function useActivityActions(deps: ActivityActionsDeps) {
     setLoading(false);
 
     if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadMeetings(clubId);
+  };
+
+  // Records the caller's own RSVP to an upcoming meeting. Optimistically
+  // patches the local meeting (response + tally) so the control reacts
+  // instantly, then upserts and reverts on error.
+  const setMeetingRsvp = async (
+    meetingId: string,
+    response: MeetingRsvpResponse,
+  ) => {
+    if (!clubId || !currentMemberId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+
+    let previous: ClubMeeting | undefined;
+    setMeetings((prev) =>
+      prev.map((meeting) => {
+        if (meeting.id !== meetingId) {
+          return meeting;
+        }
+        previous = meeting;
+        const counts = { ...meeting.rsvpCounts };
+        if (meeting.myRsvp) {
+          counts[meeting.myRsvp] = Math.max(0, counts[meeting.myRsvp] - 1);
+        }
+        counts[response] += 1;
+        return { ...meeting, myRsvp: response, rsvpCounts: counts };
+      }),
+    );
+
+    const { error } = await supabase.from("meeting_rsvps").upsert(
+      {
+        club_id: clubId,
+        meeting_id: meetingId,
+        member_id: currentMemberId,
+        response,
+      },
+      { onConflict: "meeting_id,member_id" },
+    );
+
+    if (error) {
+      // Revert the optimistic patch on failure.
+      if (previous) {
+        const snapshot = previous;
+        setMeetings((prev) =>
+          prev.map((meeting) =>
+            meeting.id === meetingId ? snapshot : meeting,
+          ),
+        );
+      }
       setErrorText(error.message);
       return;
     }
@@ -381,6 +444,7 @@ export function useActivityActions(deps: ActivityActionsDeps) {
     createMeeting,
     updateMeetingStatus,
     updateMeeting,
+    setMeetingRsvp,
     createPoll,
     castVote,
     closePoll,
