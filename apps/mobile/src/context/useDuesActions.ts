@@ -29,7 +29,6 @@ type DuesActionsDeps = {
   loadDues: (clubId: string) => Promise<void>;
   loadDuesPlans: (clubId: string) => Promise<void>;
   loadDuesCycles: (clubId: string) => Promise<void>;
-  loadLedger: (clubId: string) => Promise<void>;
   refreshDues: () => Promise<void>;
 };
 
@@ -45,7 +44,6 @@ export function useDuesActions(deps: DuesActionsDeps) {
     loadDues,
     loadDuesPlans,
     loadDuesCycles,
-    loadLedger,
     refreshDues,
   } = deps;
 
@@ -425,17 +423,17 @@ export function useDuesActions(deps: DuesActionsDeps) {
     }
 
     setLoading(true);
-    const { error } = await supabase.from("transactions").insert({
+    const { error } = await supabase.from("ledger_entries").insert({
       club_id: clubId,
       member_id: null,
       recorded_by: currentMemberId,
       type: input.type,
       amount: input.amount,
       category,
-      payment_method: input.paymentMethod.trim() || "UPI",
+      method: input.paymentMethod.trim() || "UPI",
       status: "completed",
-      description: input.description.trim() || null,
       source: "manual",
+      occurred_at: new Date().toISOString(),
     });
     setLoading(false);
 
@@ -444,7 +442,7 @@ export function useDuesActions(deps: DuesActionsDeps) {
       return;
     }
 
-    await loadLedger(clubId);
+    await refreshDues();
     setInfoText(
       `${input.type === "income" ? "Income" : "Expense"} of ${input.amount} recorded.`,
     );
@@ -513,6 +511,50 @@ export function useDuesActions(deps: DuesActionsDeps) {
     setInfoText(`Sent ${sent} payment link${sent === 1 ? "" : "s"}.`);
   };
 
+  const markDuePaid = async (
+    due: MemberDue,
+    method: "Cash" | "UPI" | "Bank",
+  ) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!canManageFinances(currentRole)) {
+      setErrorText("Only an owner or treasurer can mark dues as paid.");
+      return;
+    }
+
+    if (!due.id) {
+      setErrorText("Invalid due ID.");
+      return;
+    }
+
+    const remaining = Math.max(due.amountDue - due.amountPaid, 0);
+    if (remaining <= 0) {
+      setErrorText("This due is already fully paid.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase.rpc("record_due_payment", {
+      _due_id: due.id,
+      _amount: remaining,
+      _method: method,
+    });
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    setInfoText(`Marked as paid via ${method}.`);
+    await refreshDues();
+  };
+
   return {
     ensureAutoDuesCycles,
     createDuesPlan,
@@ -524,5 +566,6 @@ export function useDuesActions(deps: DuesActionsDeps) {
     recordTransaction,
     startDuePayment,
     sendDuePaymentLinks,
+    markDuePaid,
   };
 }

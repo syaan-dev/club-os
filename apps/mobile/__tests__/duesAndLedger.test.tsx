@@ -187,7 +187,7 @@ const buildFromHandler =
       }
       return { data: club, error: null };
     }
-    // dues_plans, dues_cycles, member_dues, transactions, club_invites -> empty.
+    // dues_plans, dues_cycles, member_dues, ledger_entries, club_invites -> empty.
     return { data: [], error: null };
   };
 
@@ -274,13 +274,13 @@ describe("Dues & ledger role matrix", () => {
     fireEvent.press(screen.getByText("Record transaction"));
 
     await waitFor(() => {
-      expect(lastInsert["transactions"]).toEqual(
+      expect(lastInsert["ledger_entries"]).toEqual(
         expect.objectContaining({
           club_id: "club1",
           type: "expense",
           amount: 350,
           category: "Venue",
-          payment_method: "UPI",
+          method: "UPI",
           status: "completed",
           source: "manual",
           recorded_by: "me",

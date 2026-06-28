@@ -15,6 +15,7 @@ import type {
   DuesSummary,
   Invite,
   LedgerEntry,
+  LedgerSummary,
   MeetingRsvpResponse,
   MeetingStatus,
   Member,
@@ -34,6 +35,7 @@ import {
   fetchDuesCycles,
   fetchDuesPlans,
   fetchLedger,
+  fetchLedgerSummary,
   fetchMemberDues,
 } from "./data/dues";
 import {
@@ -117,6 +119,7 @@ export type ClubOsContextValue = {
   duesPlans: DuesPlan[];
   duesCycles: DuesCycle[];
   ledgerEntries: LedgerEntry[];
+  ledgerSummary: LedgerSummary | null;
   canManageDues: boolean;
   meetings: ClubMeeting[];
   polls: Poll[];
@@ -229,6 +232,7 @@ export type ClubOsContextValue = {
     cycleId?: string;
     dueId?: string;
   }) => Promise<void>;
+  markDuePaid: (due: MemberDue, method: "Cash" | "UPI" | "Bank") => Promise<void>;
   refreshActivities: () => Promise<void>;
   createMeeting: (input: {
     title: string;
@@ -320,6 +324,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const [duesPlans, setDuesPlans] = useState<DuesPlan[]>([]);
   const [duesCycles, setDuesCycles] = useState<DuesCycle[]>([]);
   const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [ledgerSummary, setLedgerSummary] = useState<LedgerSummary | null>(null);
   const [meetings, setMeetings] = useState<ClubMeeting[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
@@ -631,6 +636,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       loadDuesPlans(clubId),
       loadDuesCycles(clubId),
       loadLedger(clubId),
+      loadLedgerSummary(clubId),
     ]);
   };
 
@@ -689,6 +695,10 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
 
   const loadLedger = async (activeClubId: string) => {
     setLedgerEntries(await fetchLedger(activeClubId));
+  };
+
+  const loadLedgerSummary = async (activeClubId: string) => {
+    setLedgerSummary(await fetchLedgerSummary(activeClubId));
   };
 
   const loadMeetings = async (activeClubId: string) => {
@@ -752,6 +762,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     recordTransaction,
     startDuePayment,
     sendDuePaymentLinks,
+    markDuePaid,
   } = useDuesActions({
     clubId,
     currentRole,
@@ -763,7 +774,6 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     loadDues,
     loadDuesPlans,
     loadDuesCycles,
-    loadLedger,
     refreshDues,
   });
 
@@ -1555,6 +1565,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     recordTransaction,
     startDuePayment,
     sendDuePaymentLinks,
+    markDuePaid,
     refreshActivities,
     createMeeting,
     updateMeetingStatus,
@@ -1717,6 +1728,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       duesPlans,
       duesCycles,
       ledgerEntries,
+      ledgerSummary,
       canManageDues,
       paidCount,
       unpaidCount,
@@ -1732,6 +1744,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       recordTransaction: api.recordTransaction,
       startDuePayment: api.startDuePayment,
       sendDuePaymentLinks: api.sendDuePaymentLinks,
+      markDuePaid: api.markDuePaid,
     }),
     [
       memberDues,
@@ -1740,6 +1753,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       duesPlans,
       duesCycles,
       ledgerEntries,
+      ledgerSummary,
       canManageDues,
       paidCount,
       unpaidCount,

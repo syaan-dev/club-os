@@ -118,6 +118,7 @@ export type DuesContextValue = Pick<
   | "duesPlans"
   | "duesCycles"
   | "ledgerEntries"
+  | "ledgerSummary"
   | "canManageDues"
   | "paidCount"
   | "unpaidCount"
@@ -133,6 +134,7 @@ export type DuesContextValue = Pick<
   | "recordTransaction"
   | "startDuePayment"
   | "sendDuePaymentLinks"
+  | "markDuePaid"
 >;
 
 export type ActivitiesContextValue = Pick<

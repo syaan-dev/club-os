@@ -28,9 +28,9 @@ Deno.serve(
     const type = requireEnum(body, "type", TYPES);
     const amount = requirePositiveNumber(body, "amount");
     const category = requireString(body, "category", { max: 100 });
-    const paymentMethod = optionalString(body, "paymentMethod", { max: 50 }) ??
+    const method = optionalString(body, "method", { max: 50 }) ??
       "UPI";
-    const description = optionalString(body, "description", { max: 2000 });
+    const receiptUrl = optionalString(body, "receiptUrl");
     const memberId = body.memberId === undefined || body.memberId === null
       ? null
       : requireUuid(body, "memberId");
@@ -44,7 +44,7 @@ Deno.serve(
     }
 
     const { data: tx, error } = await client
-      .from("transactions")
+      .from("ledger_entries")
       .insert({
         club_id: clubId,
         member_id: memberId,
@@ -52,12 +52,13 @@ Deno.serve(
         type,
         amount,
         category,
-        payment_method: paymentMethod,
+        method,
         status: "completed",
-        description,
         source: "manual",
+        receipt_url: receiptUrl,
+        occurred_at: new Date().toISOString(),
       })
-      .select("id,type,amount,category,payment_method,created_at")
+      .select("id,type,amount,category,method,created_at")
       .single();
 
     if (error || !tx) {
@@ -68,7 +69,7 @@ Deno.serve(
       clubId,
       actorMemberId: actor!.memberId,
       eventType: "transaction.recorded",
-      entityType: "transaction",
+      entityType: "ledger_entry",
       entityId: tx.id,
       eventData: { type, amount, category },
     });
