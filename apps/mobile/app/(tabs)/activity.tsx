@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { styles } from "../../src/styles";
 import { useActivities } from "../../src/context/domainHooks";
-import type { Announcement, ClubMeeting } from "../../src/types";
+import type { Announcement, ClubMeeting, Poll } from "../../src/types";
 import { TabScreenShell } from "../../src/components/TabScreenShell";
 import { MeetingsTab } from "../../src/components/activity/MeetingsTab";
 import { PollsTab } from "../../src/components/activity/PollsTab";
@@ -31,6 +31,7 @@ export default function ActivityScreen() {
   const [meetingFormOpen, setMeetingFormOpen] = useState(false);
   const [editingMeeting, setEditingMeeting] = useState<ClubMeeting | null>(null);
   const [pollFormOpen, setPollFormOpen] = useState(false);
+  const [editingPoll, setEditingPoll] = useState<Poll | null>(null);
   const [announceFormOpen, setAnnounceFormOpen] = useState(false);
   const [openNotice, setOpenNotice] = useState<Announcement | null>(null);
 
@@ -49,6 +50,16 @@ export default function ActivityScreen() {
   const openEditMeeting = (meeting: ClubMeeting) => {
     setEditingMeeting(meeting);
     setMeetingFormOpen(true);
+  };
+
+  const openCreatePoll = () => {
+    setEditingPoll(null);
+    setPollFormOpen(true);
+  };
+
+  const openEditPoll = (poll: Poll) => {
+    setEditingPoll(poll);
+    setPollFormOpen(true);
   };
 
   // Opening a notice reads it like an email: show the full message and mark it
@@ -104,7 +115,7 @@ export default function ActivityScreen() {
       ) : null}
 
       {tab === "polls" ? (
-        <PollsTab onNewPoll={() => setPollFormOpen(true)} />
+        <PollsTab onNewPoll={openCreatePoll} onEditPoll={openEditPoll} />
       ) : null}
 
       {tab === "announcements" ? (
@@ -125,7 +136,11 @@ export default function ActivityScreen() {
 
       <PollFormModal
         visible={pollFormOpen}
-        onClose={() => setPollFormOpen(false)}
+        editingPoll={editingPoll}
+        onClose={() => {
+          setPollFormOpen(false);
+          setEditingPoll(null);
+        }}
       />
 
       <AnnouncementFormModal

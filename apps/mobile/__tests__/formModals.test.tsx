@@ -38,6 +38,7 @@ const plan: DuesPlan = {
   graceDays: 5,
   autoGenerate: true,
   startDate: "2026-01-01",
+  isActive: true,
 };
 
 const meeting: ClubMeeting = {

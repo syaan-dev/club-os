@@ -66,6 +66,11 @@ export const activityStyles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
+  activeCardTopLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
   openPill: {
     alignSelf: "flex-start",
     borderRadius: 999,

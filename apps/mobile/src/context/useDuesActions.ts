@@ -224,6 +224,42 @@ export function useDuesActions(deps: DuesActionsDeps) {
     setInfoText(`Dues plan "${name}" updated.`);
   };
 
+  // Archive (active=false) or reactivate (active=true) a dues plan. Archiving
+  // stops all future billing but keeps the plan's cycles and history intact;
+  // it never deletes data.
+  const setDuesPlanActive = async (planId: string, active: boolean) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!canManageFinances(currentRole)) {
+      setErrorText("Only an owner or treasurer can archive dues plans.");
+      return;
+    }
+
+    const plan = duesPlans.find((item) => item.id === planId);
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("dues_plans")
+      .update({ is_active: active })
+      .eq("id", planId)
+      .eq("club_id", clubId);
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+
+    await loadDuesPlans(clubId);
+    const label = plan?.name ?? "Dues plan";
+    setInfoText(active ? `"${label}" reactivated.` : `"${label}" archived.`);
+  };
+
   const createDuesCycle = async (input: {
     duesPlanId: string;
     cycleLabel: string;
@@ -481,6 +517,7 @@ export function useDuesActions(deps: DuesActionsDeps) {
     ensureAutoDuesCycles,
     createDuesPlan,
     updateDuesPlan,
+    setDuesPlanActive,
     createDuesCycle,
     updateDuesCycle,
     generateDues,

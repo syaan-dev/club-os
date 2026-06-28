@@ -4,6 +4,7 @@ import { colors, styles } from "../../styles";
 import { useActivities, useUi } from "../../context/domainHooks";
 import type { Poll } from "../../types";
 import { formatCountdown, formatDateTime } from "./format";
+import { PollDetailModal } from "./PollDetailModal";
 
 // Returns the winning option index for a closed poll, or -1 when there are no
 // votes or the top is tied. Used for the one-line "X won" history summary.
@@ -22,18 +23,23 @@ const winningOptionIndex = (poll: Poll) => {
 // "Polls" tab. The screen is triaged member-first: open polls that want a vote
 // sit up top under "Needs your vote", while closed polls collapse into quiet
 // one-line history rows that expand on demand.
-export function PollsTab({ onNewPoll }: { onNewPoll: () => void }) {
+export function PollsTab({
+  onNewPoll,
+  onEditPoll,
+}: {
+  onNewPoll: () => void;
+  onEditPoll: (poll: Poll) => void;
+}) {
   const { polls, activityLoading, canManageActivities, castVote, closePoll } =
     useActivities();
   const { loading } = useUi();
 
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [selectedClosedPoll, setSelectedClosedPoll] = useState<Poll | null>(
+    null,
+  );
 
   const activePolls = polls.filter((poll) => poll.status === "open");
   const closedPolls = polls.filter((poll) => poll.status !== "open");
-
-  const toggleExpanded = (id: string) =>
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
 
   // Result bars: filled percentage rows shown once the member has voted (or on
   // an expanded closed poll). The member's own pick gets a check + highlight.
@@ -93,15 +99,27 @@ export function PollsTab({ onNewPoll }: { onNewPoll: () => void }) {
     return (
       <View key={poll.id} style={styles.activeCard}>
         <View style={styles.activeCardTop}>
-          <View style={styles.openPill}>
-            <Text style={styles.openPillText}>Open</Text>
-          </View>
-          {countdown ? (
-            <View style={styles.countdownRow}>
-              <Text style={styles.countdownText}>
-                {"\uD83D\uDD52"} closes {countdown}
-              </Text>
+          <View style={styles.activeCardTopLeft}>
+            <View style={styles.openPill}>
+              <Text style={styles.openPillText}>Open</Text>
             </View>
+            {countdown ? (
+              <View style={styles.countdownRow}>
+                <Text style={styles.countdownText}>
+                  {"\uD83D\uDD52"} closes {countdown}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          {canManageActivities ? (
+            <Pressable
+              onPress={() => onEditPoll(poll)}
+              accessibilityRole="button"
+              accessibilityLabel={`Edit poll ${poll.question}`}
+              hitSlop={8}
+            >
+              <Text style={styles.headerChevron}>{"\u203A"}</Text>
+            </Pressable>
           ) : null}
         </View>
         <Text style={styles.itemQuestion}>{poll.question}</Text>
@@ -138,40 +156,30 @@ export function PollsTab({ onNewPoll }: { onNewPoll: () => void }) {
         : winnerIndex >= 0
           ? `\u201c${poll.options[winnerIndex]}\u201d won`
           : "Tie";
-    const isOpen = expanded[poll.id];
     return (
-      <View key={poll.id}>
-        <Pressable
-          style={styles.collapsedRow}
-          onPress={() => toggleExpanded(poll.id)}
-          accessibilityRole="button"
-          accessibilityLabel={`${poll.question}, ${summary}`}
-        >
-          <View style={styles.collapsedMain}>
-            <Text style={styles.collapsedTitle} numberOfLines={1}>
-              {poll.question}
-            </Text>
-            <Text style={styles.collapsedMeta}>
-              {poll.totalVotes} vote{poll.totalVotes === 1 ? "" : "s"}
-              {poll.closesAt
-                ? ` \u00b7 closed ${formatDateTime(poll.closesAt)}`
-                : ""}
-            </Text>
-          </View>
-          <View style={styles.collapsedRight}>
-            <Text style={styles.collapsedSummary}>{summary}</Text>
-            <Text style={styles.collapsedChevron}>
-              {isOpen ? "\u2303" : "\u2304"}
-            </Text>
-          </View>
-        </Pressable>
-        {isOpen ? (
-          <View style={{ paddingBottom: 12 }}>
-            {renderResultBars(poll, false)}
-            <Text style={styles.metaText}>By {poll.createdByName}</Text>
-          </View>
-        ) : null}
-      </View>
+      <Pressable
+        key={poll.id}
+        style={styles.collapsedRow}
+        onPress={() => setSelectedClosedPoll(poll)}
+        accessibilityRole="button"
+        accessibilityLabel={`${poll.question}, ${summary}. View details`}
+      >
+        <View style={styles.collapsedMain}>
+          <Text style={styles.collapsedTitle} numberOfLines={1}>
+            {poll.question}
+          </Text>
+          <Text style={styles.collapsedMeta}>
+            {poll.totalVotes} vote{poll.totalVotes === 1 ? "" : "s"}
+            {poll.closesAt
+              ? ` \u00b7 closed ${formatDateTime(poll.closesAt)}`
+              : ""}
+          </Text>
+        </View>
+        <View style={styles.collapsedRight}>
+          <Text style={styles.collapsedSummary}>{summary}</Text>
+          <Text style={styles.collapsedChevron}>{"\u203A"}</Text>
+        </View>
+      </Pressable>
     );
   };
 
@@ -230,6 +238,11 @@ export function PollsTab({ onNewPoll }: { onNewPoll: () => void }) {
       ) : (
         closedPolls.map(renderClosedPoll)
       )}
+
+      <PollDetailModal
+        poll={selectedClosedPoll}
+        onClose={() => setSelectedClosedPoll(null)}
+      />
     </View>
   );
 }

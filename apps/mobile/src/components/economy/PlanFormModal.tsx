@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { styles } from "../../styles";
 import { useDues } from "../../context/domainHooks";
 import { useUi } from "../../context/domainHooks";
@@ -19,7 +27,7 @@ export function PlanFormModal({
   editingPlan: DuesPlan | null;
   onClose: () => void;
 }) {
-  const { createDuesPlan, updateDuesPlan } = useDues();
+  const { createDuesPlan, updateDuesPlan, setDuesPlanActive } = useDues();
   const { loading } = useUi();
 
   const [planName, setPlanName] = useState("");
@@ -66,6 +74,49 @@ export function PlanFormModal({
       await createDuesPlan(payload);
     }
     onClose();
+  };
+
+  // Archiving stops all future billing but keeps cycles and history intact, so
+  // confirm before flipping the plan inactive.
+  const confirmArchive = () => {
+    if (!editingPlan) {
+      return;
+    }
+    Alert.alert(
+      "Archive plan",
+      `Stop billing for ${editingPlan.name}? Existing dues and history stay intact, and you can reactivate it later.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Archive",
+          style: "destructive",
+          onPress: () => {
+            void setDuesPlanActive(editingPlan.id, false);
+            onClose();
+          },
+        },
+      ],
+    );
+  };
+
+  const confirmReactivate = () => {
+    if (!editingPlan) {
+      return;
+    }
+    Alert.alert(
+      "Reactivate plan",
+      `Resume ${editingPlan.name}? It will appear in the plan list and can bill members again.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reactivate",
+          onPress: () => {
+            void setDuesPlanActive(editingPlan.id, true);
+            onClose();
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -194,6 +245,53 @@ export function PlanFormModal({
               onPress={onSubmit}
               disabled={loading}
             />
+
+            {editingPlan ? (
+              <>
+                <View style={styles.separator} />
+                {editingPlan.isActive ? (
+                  <>
+                    <Pressable
+                      onPress={confirmArchive}
+                      disabled={loading}
+                      style={[
+                        styles.dangerButton,
+                        loading && styles.buttonDisabled,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Archive plan ${editingPlan.name}`}
+                    >
+                      <Text style={styles.dangerButtonText}>Archive plan</Text>
+                    </Pressable>
+                    <Text style={styles.memberMeta}>
+                      Archiving stops future billing. Cycles and history are
+                      kept, and you can reactivate any time.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <Pressable
+                      onPress={confirmReactivate}
+                      disabled={loading}
+                      style={[
+                        styles.inlineButton,
+                        loading && styles.buttonDisabled,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Reactivate plan ${editingPlan.name}`}
+                    >
+                      <Text style={styles.inlineButtonText}>
+                        Reactivate plan
+                      </Text>
+                    </Pressable>
+                    <Text style={styles.memberMeta}>
+                      This plan is archived. Reactivate it to bill members
+                      again.
+                    </Text>
+                  </>
+                )}
+              </>
+            ) : null}
           </ScrollView>
         </Pressable>
       </Pressable>

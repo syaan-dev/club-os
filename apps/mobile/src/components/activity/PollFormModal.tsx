@@ -2,34 +2,50 @@ import { useEffect, useState } from "react";
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { styles } from "../../styles";
 import { useActivities, useUi } from "../../context/domainHooks";
+import type { Poll } from "../../types";
 import { AppButton } from "../AppButton";
 import { DateField } from "../DateField";
 
-// Create a poll (leadership only). Owns its own option list + form state and
-// commits through the activities domain hook.
+// Create / edit a poll (leadership only). Owns its own option list + form state
+// and commits through the activities domain hook. Editing is only offered for
+// open polls; once votes exist the options lock so existing ballots (stored by
+// option index) can't be silently invalidated.
 export function PollFormModal({
   visible,
+  editingPoll,
   onClose,
 }: {
   visible: boolean;
+  editingPoll: Poll | null;
   onClose: () => void;
 }) {
-  const { createPoll } = useActivities();
+  const { createPoll, updatePoll } = useActivities();
   const { loading } = useUi();
 
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollOptions, setPollOptions] = useState<string[]>(["", ""]);
   const [pollCloses, setPollCloses] = useState("");
 
-  // Reset the form each time the sheet opens.
+  const optionsLocked =
+    editingPoll !== null && editingPoll.totalVotes > 0;
+
+  // Re-seed the form each time the sheet opens, from the poll being edited.
   useEffect(() => {
     if (!visible) {
       return;
     }
-    setPollQuestion("");
-    setPollOptions(["", ""]);
-    setPollCloses("");
-  }, [visible]);
+    if (editingPoll) {
+      setPollQuestion(editingPoll.question);
+      setPollOptions(
+        editingPoll.options.length >= 2 ? editingPoll.options : ["", ""],
+      );
+      setPollCloses(editingPoll.closesAt ? editingPoll.closesAt.slice(0, 10) : "");
+    } else {
+      setPollQuestion("");
+      setPollOptions(["", ""]);
+      setPollCloses("");
+    }
+  }, [visible, editingPoll]);
 
   const updateOption = (index: number, value: string) => {
     setPollOptions((prev) =>
@@ -48,11 +64,16 @@ export function PollFormModal({
   };
 
   const onSubmit = async () => {
-    await createPoll({
+    const payload = {
       question: pollQuestion,
       options: pollOptions,
       closesAt: pollCloses,
-    });
+    };
+    if (editingPoll) {
+      await updatePoll(editingPoll.id, payload);
+    } else {
+      await createPoll(payload);
+    }
     onClose();
   };
 
@@ -66,7 +87,9 @@ export function PollFormModal({
       <Pressable style={styles.sheetBackdrop} onPress={onClose}>
         <Pressable style={styles.sheet} onPress={() => {}}>
           <View style={styles.sheetHandle} />
-          <Text style={styles.sheetTitle}>New poll</Text>
+          <Text style={styles.sheetTitle}>
+            {editingPoll ? "Edit poll" : "New poll"}
+          </Text>
           <ScrollView
             contentContainerStyle={{ gap: 12 }}
             showsVerticalScrollIndicator={false}
@@ -82,6 +105,11 @@ export function PollFormModal({
             />
 
             <Text style={styles.fieldLabel}>Options</Text>
+            {optionsLocked ? (
+              <Text style={styles.memberMeta}>
+                Options are locked because members have already voted.
+              </Text>
+            ) : null}
             {pollOptions.map((option, index) => (
               <View
                 key={index}
@@ -92,9 +120,10 @@ export function PollFormModal({
                   placeholder={`Option ${index + 1}`}
                   value={option}
                   onChangeText={(value) => updateOption(index, value)}
+                  editable={!optionsLocked}
                   accessibilityLabel={`Poll option ${index + 1}`}
                 />
-                {pollOptions.length > 2 ? (
+                {!optionsLocked && pollOptions.length > 2 ? (
                   <Pressable
                     onPress={() => removeOption(index)}
                     accessibilityRole="button"
@@ -107,7 +136,7 @@ export function PollFormModal({
                 ) : null}
               </View>
             ))}
-            {pollOptions.length < 10 ? (
+            {!optionsLocked && pollOptions.length < 10 ? (
               <Pressable
                 style={styles.inlineButton}
                 onPress={addOption}
@@ -128,7 +157,13 @@ export function PollFormModal({
             />
 
             <AppButton
-              label={loading ? "Saving..." : "Create poll"}
+              label={
+                loading
+                  ? "Saving..."
+                  : editingPoll
+                    ? "Save changes"
+                    : "Create poll"
+              }
               onPress={onSubmit}
               disabled={loading || pollQuestion.trim().length === 0}
             />

@@ -105,6 +105,29 @@ This is the standard way to create/edit list items (used in Economy dues plans
 - Tapping a list row opens the **same** modal in edit mode (prefilled);
   `＋ New` opens it empty. One modal serves both create and edit.
 
+### Row chevron = "this row is actionable"
+A trailing chevron is the single, consistent signal that a list row navigates
+or opens an editor. Treat its presence as meaningful, not decorative:
+- **Show a trailing `›` (`styles.headerChevron`) only when the row is
+  actionable** for the current user — i.e. tapping it does something (opens an
+  edit sheet, a detail view, a role picker, etc.).
+- **Omit the chevron when the row is read-only or disabled** (e.g. a member who
+  lacks the role to edit, or your own row that can't be changed). The row may
+  still render, but without the chevron it reads as static.
+- Drive the chevron off the **same condition** that gates the `onPress`
+  handler, so the affordance never lies. Example from the Members tab:
+  ```tsx
+  const canEditRow =
+    canManageRoles && item.status === "active" && item.id !== currentMemberId;
+  // ...
+  <Pressable onPress={canEditRow ? () => openRow(item) : undefined}>
+    {/* row content */}
+    {canEditRow ? <Text style={styles.headerChevron}>›</Text> : null}
+  </Pressable>
+  ```
+- Do **not** use a pencil/edit glyph for this. The chevron is the house style
+  for "tap to open"; reserve other glyphs for distinct meanings.
+
 ### Bottom-sheet modals
 Used for all create/edit/detail forms. Structure:
 ```tsx

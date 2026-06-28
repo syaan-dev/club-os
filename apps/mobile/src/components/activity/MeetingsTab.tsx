@@ -9,6 +9,7 @@ import {
   formatDateTime,
   meetingStatusColor,
 } from "./format";
+import { MeetingDetailModal } from "./MeetingDetailModal";
 
 // The three RSVP choices, with their active styling and button label.
 const RSVP_OPTIONS: {
@@ -51,11 +52,11 @@ export function MeetingsTab({
     meetings,
     activityLoading,
     canManageActivities,
-    updateMeetingStatus,
     setMeetingRsvp,
   } = useActivities();
 
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [selectedPastMeeting, setSelectedPastMeeting] =
+    useState<ClubMeeting | null>(null);
 
   const upcomingMeetings = meetings.filter(
     (meeting) => meeting.status === "scheduled",
@@ -64,25 +65,31 @@ export function MeetingsTab({
     (meeting) => meeting.status !== "scheduled",
   );
 
-  const toggleExpanded = (id: string) =>
-    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
-
   const renderUpcomingMeeting = (meeting: ClubMeeting) => {
     const countdown = formatCountdown(meeting.scheduledAt);
     const { yes, no, maybe } = meeting.rsvpCounts;
     const totalRsvps = yes + no + maybe;
-    return (
-      <View key={meeting.id} style={styles.activeCard}>
+
+    // Header (pill + countdown + title + meta) is tappable for leadership to
+    // open the edit sheet, signalled by a trailing chevron. Members see the
+    // same content without the chevron / tap affordance.
+    const header = (
+      <>
         <View style={styles.activeCardTop}>
-          <View style={styles.openPill}>
-            <Text style={styles.openPillText}>Upcoming</Text>
-          </View>
-          {countdown ? (
-            <View style={styles.countdownRow}>
-              <Text style={styles.countdownText}>
-                {"\uD83D\uDD52"} {countdown}
-              </Text>
+          <View style={styles.activeCardTopLeft}>
+            <View style={styles.openPill}>
+              <Text style={styles.openPillText}>Upcoming</Text>
             </View>
+            {countdown ? (
+              <View style={styles.countdownRow}>
+                <Text style={styles.countdownText}>
+                  {"\uD83D\uDD52"} {countdown}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+          {canManageActivities ? (
+            <Text style={styles.headerChevron}>{"\u203A"}</Text>
           ) : null}
         </View>
         <Text style={styles.itemQuestion}>{meeting.title}</Text>
@@ -93,6 +100,22 @@ export function MeetingsTab({
         {meeting.description ? (
           <Text style={styles.metaText}>{meeting.description}</Text>
         ) : null}
+      </>
+    );
+
+    return (
+      <View key={meeting.id} style={styles.activeCard}>
+        {canManageActivities ? (
+          <Pressable
+            onPress={() => onEditMeeting(meeting)}
+            accessibilityRole="button"
+            accessibilityLabel={`Edit ${meeting.title}`}
+          >
+            {header}
+          </Pressable>
+        ) : (
+          header
+        )}
 
         <View style={styles.rsvpRow}>
           {RSVP_OPTIONS.map((option) => {
@@ -128,88 +151,44 @@ export function MeetingsTab({
         <Text style={styles.organiserMeta}>
           Organised by {meeting.createdByName}
         </Text>
-        {canManageActivities ? (
-          <View style={styles.rowActions}>
-            <Pressable
-              style={styles.inlineButton}
-              onPress={() => onEditMeeting(meeting)}
-              accessibilityRole="button"
-              accessibilityLabel={`Edit ${meeting.title}`}
-            >
-              <Text style={styles.inlineButtonText}>Edit</Text>
-            </Pressable>
-            <Pressable
-              style={styles.inlineButton}
-              onPress={() => updateMeetingStatus(meeting.id, "completed")}
-              accessibilityRole="button"
-              accessibilityLabel={`Mark ${meeting.title} completed`}
-            >
-              <Text style={styles.inlineButtonText}>Mark completed</Text>
-            </Pressable>
-            <Pressable
-              style={styles.inlineButton}
-              onPress={() => updateMeetingStatus(meeting.id, "cancelled")}
-              accessibilityRole="button"
-              accessibilityLabel={`Cancel ${meeting.title}`}
-            >
-              <Text style={styles.inlineButtonText}>Cancel</Text>
-            </Pressable>
-          </View>
-        ) : null}
       </View>
     );
   };
 
-  const renderPastMeeting = (meeting: ClubMeeting) => {
-    const isOpen = expanded[meeting.id];
-    return (
-      <View key={meeting.id}>
-        <Pressable
-          style={styles.collapsedRow}
-          onPress={() => toggleExpanded(meeting.id)}
-          accessibilityRole="button"
-          accessibilityLabel={`${meeting.title}, ${meeting.status}`}
-        >
-          <View style={styles.collapsedMain}>
-            <Text style={styles.collapsedTitle} numberOfLines={1}>
-              {meeting.title}
-            </Text>
-            <Text style={styles.collapsedMeta}>
-              {formatDateTime(meeting.scheduledAt)}
-            </Text>
-          </View>
-          <View style={styles.collapsedRight}>
-            <Text
-              style={[
-                styles.collapsedSummary,
-                { color: meetingStatusColor(meeting.status) },
-              ]}
-              accessibilityLabel={meeting.status}
-            >
-              {meeting.status === "completed" ? "\u2705" : meeting.status}
-            </Text>
-            <Text style={styles.collapsedChevron}>
-              {isOpen ? "\u2303" : "\u2304"}
-            </Text>
-          </View>
-        </Pressable>
-        {isOpen ? (
-          <View style={{ paddingBottom: 12 }}>
-            <Text style={styles.itemMeta}>
-              {formatDateAndTime(meeting.scheduledAt)}
-              {meeting.location ? ` \u00b7 ${meeting.location}` : ""}
-            </Text>
-            {meeting.description ? (
-              <Text style={styles.metaText}>{meeting.description}</Text>
-            ) : null}
-            <Text style={styles.metaText}>
-              Organised by {meeting.createdByName}
-            </Text>
-          </View>
-        ) : null}
+  const renderPastMeeting = (meeting: ClubMeeting) => (
+    <Pressable
+      key={meeting.id}
+      style={styles.collapsedRow}
+      onPress={() => setSelectedPastMeeting(meeting)}
+      accessibilityRole="button"
+      accessibilityLabel={`${meeting.title}, ${meeting.status}. View details`}
+    >
+      <View style={styles.collapsedMain}>
+        <Text style={styles.collapsedTitle} numberOfLines={1}>
+          {meeting.title}
+        </Text>
+        <Text style={styles.collapsedMeta}>
+          {formatDateTime(meeting.scheduledAt)}
+        </Text>
       </View>
-    );
-  };
+      <View style={styles.collapsedRight}>
+        <Text
+          style={[
+            styles.collapsedSummary,
+            { color: meetingStatusColor(meeting.status) },
+          ]}
+          accessibilityLabel={meeting.status}
+        >
+          {meeting.status === "completed"
+            ? "\u2705"
+            : meeting.status === "cancelled"
+              ? "\u274C"
+              : meeting.status}
+        </Text>
+        <Text style={styles.collapsedChevron}>{"\u203A"}</Text>
+      </View>
+    </Pressable>
+  );
 
   const loadingFirst = activityLoading && meetings.length === 0;
 
@@ -266,6 +245,11 @@ export function MeetingsTab({
       ) : (
         pastMeetings.map(renderPastMeeting)
       )}
+
+      <MeetingDetailModal
+        meeting={selectedPastMeeting}
+        onClose={() => setSelectedPastMeeting(null)}
+      />
     </View>
   );
 }

@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { styles } from "../../styles";
 import { useActivities, useUi } from "../../context/domainHooks";
 import type { ClubMeeting } from "../../types";
@@ -17,7 +25,7 @@ export function MeetingFormModal({
   editingMeeting: ClubMeeting | null;
   onClose: () => void;
 }) {
-  const { createMeeting, updateMeeting } = useActivities();
+  const { createMeeting, updateMeeting, updateMeetingStatus } = useActivities();
   const { loading } = useUi();
 
   const [meetingTitle, setMeetingTitle] = useState("");
@@ -56,6 +64,47 @@ export function MeetingFormModal({
       await createMeeting(payload);
     }
     onClose();
+  };
+
+  const confirmComplete = () => {
+    if (!editingMeeting) {
+      return;
+    }
+    Alert.alert(
+      "Mark completed",
+      `Mark "${editingMeeting.title}" as completed?`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Mark completed",
+          onPress: async () => {
+            await updateMeetingStatus(editingMeeting.id, "completed");
+            onClose();
+          },
+        },
+      ],
+    );
+  };
+
+  const confirmCancelMeeting = () => {
+    if (!editingMeeting) {
+      return;
+    }
+    Alert.alert(
+      "Cancel meeting",
+      `Cancel "${editingMeeting.title}"? This can't be undone.`,
+      [
+        { text: "Keep meeting", style: "cancel" },
+        {
+          text: "Cancel meeting",
+          style: "destructive",
+          onPress: async () => {
+            await updateMeetingStatus(editingMeeting.id, "cancelled");
+            onClose();
+          },
+        },
+      ],
+    );
   };
 
   return (
@@ -124,6 +173,31 @@ export function MeetingFormModal({
               onPress={onSubmit}
               disabled={loading || meetingTitle.trim().length === 0}
             />
+
+            {editingMeeting && editingMeeting.status === "scheduled" ? (
+              <>
+                <View style={styles.separator} />
+                <Text style={styles.fieldLabel}>Actions</Text>
+                <Pressable
+                  onPress={confirmComplete}
+                  disabled={loading}
+                  style={[styles.inlineButton, loading && styles.buttonDisabled]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Mark meeting completed"
+                >
+                  <Text style={styles.inlineButtonText}>Mark completed</Text>
+                </Pressable>
+                <Pressable
+                  onPress={confirmCancelMeeting}
+                  disabled={loading}
+                  style={[styles.dangerButton, loading && styles.buttonDisabled]}
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel meeting"
+                >
+                  <Text style={styles.dangerButtonText}>Cancel meeting</Text>
+                </Pressable>
+              </>
+            ) : null}
           </ScrollView>
         </Pressable>
       </Pressable>

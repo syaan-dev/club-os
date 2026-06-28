@@ -171,6 +171,36 @@ export const baseStyles = StyleSheet.create({
     color: colors.accent,
     fontWeight: "700",
   },
+  dropdownMenu: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+    overflow: "hidden",
+  },
+  dropdownOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+  },
+  dropdownOptionActive: {
+    backgroundColor: colors.accentSoft,
+  },
+  dropdownOptionText: {
+    fontSize: 16,
+    color: colors.textPrimary,
+  },
+  dropdownOptionTextActive: {
+    color: colors.accent,
+    fontWeight: "700",
+  },
+  dropdownOptionCheck: {
+    fontSize: 16,
+    color: colors.accent,
+    fontWeight: "700",
+  },
   sectionHeaderRow: {
     flexDirection: "row",
     alignItems: "flex-start",

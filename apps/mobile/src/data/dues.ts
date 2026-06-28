@@ -15,7 +15,7 @@ export async function fetchMemberDues(clubId: string): Promise<MemberDue[]> {
   const { data, error } = await supabase
     .from("member_dues")
     .select(
-      "id,member_id,amount_due,amount_paid,status,members(name),dues_cycles(cycle_label,due_date)",
+      "id,member_id,amount_due,amount_paid,status,members(name),dues_cycles(cycle_label,due_date,dues_plans(name))",
     )
     .eq("club_id", clubId)
     .order("created_at", { ascending: true });
@@ -29,10 +29,14 @@ export async function fetchMemberDues(clubId: string): Promise<MemberDue[]> {
     const cycleRel = Array.isArray(row.dues_cycles)
       ? row.dues_cycles[0]
       : row.dues_cycles;
+    const planRel = Array.isArray(cycleRel?.dues_plans)
+      ? cycleRel?.dues_plans[0]
+      : cycleRel?.dues_plans;
     return {
       id: row.id,
       memberId: row.member_id,
       memberName: memberRel?.name ?? "Member",
+      planName: planRel?.name ?? "Dues",
       cycleLabel: cycleRel?.cycle_label ?? "Cycle",
       dueDate: cycleRel?.due_date ?? "",
       amountDue: Number(row.amount_due ?? 0),
@@ -45,9 +49,8 @@ export async function fetchMemberDues(clubId: string): Promise<MemberDue[]> {
 export async function fetchDuesPlans(clubId: string): Promise<DuesPlan[]> {
   const { data, error } = await supabase
     .from("dues_plans")
-    .select("id,name,amount,frequency,grace_days,auto_generate,start_date")
+    .select("id,name,amount,frequency,grace_days,auto_generate,start_date,is_active")
     .eq("club_id", clubId)
-    .eq("is_active", true)
     .order("created_at", { ascending: false });
 
   if (error || !data) {
@@ -62,6 +65,7 @@ export async function fetchDuesPlans(clubId: string): Promise<DuesPlan[]> {
     graceDays: Number(row.grace_days ?? 0),
     autoGenerate: Boolean(row.auto_generate),
     startDate: row.start_date ?? null,
+    isActive: row.is_active !== false,
   }));
 }
 

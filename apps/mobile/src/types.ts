@@ -61,6 +61,7 @@ export type MemberDue = {
   id: string;
   memberId: string;
   memberName: string;
+  planName: string;
   cycleLabel: string;
   dueDate: string;
   amountDue: number;
@@ -89,6 +90,7 @@ export type DuesPlan = {
   graceDays: number;
   autoGenerate: boolean;
   startDate: string | null;
+  isActive: boolean;
 };
 
 export type DuesCycle = {

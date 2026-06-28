@@ -12,6 +12,7 @@ const due = (over: Partial<MemberDue> = {}): MemberDue => ({
   id: "d1",
   memberId: "m1",
   memberName: "Mia",
+  planName: "Membership",
   cycleLabel: "2026-06",
   dueDate: "2026-06-30",
   amountDue: 1000,

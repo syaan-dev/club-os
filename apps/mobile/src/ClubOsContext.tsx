@@ -15,6 +15,7 @@ import type {
   DuesSummary,
   Invite,
   LedgerEntry,
+  MeetingRsvpResponse,
   MeetingStatus,
   Member,
   MemberDue,
@@ -200,6 +201,7 @@ export type ClubOsContextValue = {
       startDate: string;
     },
   ) => Promise<void>;
+  setDuesPlanActive: (planId: string, active: boolean) => Promise<void>;
   createDuesCycle: (input: {
     duesPlanId: string;
     cycleLabel: string;
@@ -238,6 +240,10 @@ export type ClubOsContextValue = {
     meetingId: string,
     status: MeetingStatus,
   ) => Promise<void>;
+  setMeetingRsvp: (
+    meetingId: string,
+    response: MeetingRsvpResponse,
+  ) => Promise<void>;
   updateMeeting: (
     meetingId: string,
     input: {
@@ -252,6 +258,14 @@ export type ClubOsContextValue = {
     options: string[];
     closesAt: string;
   }) => Promise<void>;
+  updatePoll: (
+    pollId: string,
+    input: {
+      question: string;
+      options: string[];
+      closesAt: string;
+    },
+  ) => Promise<void>;
   castVote: (pollId: string, optionIndex: number) => Promise<void>;
   closePoll: (pollId: string) => Promise<void>;
   createAnnouncement: (input: { title: string; body: string }) => Promise<void>;
@@ -678,7 +692,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   };
 
   const loadMeetings = async (activeClubId: string) => {
-    setMeetings(await fetchMeetings(activeClubId));
+    setMeetings(await fetchMeetings(activeClubId, currentMemberId));
   };
 
   const loadPolls = async (activeClubId: string) => {
@@ -705,8 +719,10 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
   const {
     createMeeting,
     updateMeetingStatus,
+    setMeetingRsvp,
     updateMeeting,
     createPoll,
+    updatePoll,
     castVote,
     closePoll,
     createAnnouncement,
@@ -718,6 +734,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     setErrorText,
     setInfoText,
     setLoading,
+    setMeetings,
     setAnnouncements,
     loadMeetings,
     loadPolls,
@@ -728,6 +745,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     ensureAutoDuesCycles,
     createDuesPlan,
     updateDuesPlan,
+    setDuesPlanActive,
     createDuesCycle,
     updateDuesCycle,
     generateDues,
@@ -1529,6 +1547,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     refreshDues,
     createDuesPlan,
     updateDuesPlan,
+    setDuesPlanActive,
     createDuesCycle,
     updateDuesCycle,
     generateDues,
@@ -1539,8 +1558,10 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
     refreshActivities,
     createMeeting,
     updateMeetingStatus,
+    setMeetingRsvp,
     updateMeeting,
     createPoll,
+    updatePoll,
     castVote,
     closePoll,
     createAnnouncement,
@@ -1703,6 +1724,7 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       refreshDues: api.refreshDues,
       createDuesPlan: api.createDuesPlan,
       updateDuesPlan: api.updateDuesPlan,
+      setDuesPlanActive: api.setDuesPlanActive,
       createDuesCycle: api.createDuesCycle,
       updateDuesCycle: api.updateDuesCycle,
       generateDues: api.generateDues,
@@ -1736,8 +1758,10 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       refreshActivities: api.refreshActivities,
       createMeeting: api.createMeeting,
       updateMeetingStatus: api.updateMeetingStatus,
+      setMeetingRsvp: api.setMeetingRsvp,
       updateMeeting: api.updateMeeting,
       createPoll: api.createPoll,
+      updatePoll: api.updatePoll,
       castVote: api.castVote,
       closePoll: api.closePoll,
       createAnnouncement: api.createAnnouncement,

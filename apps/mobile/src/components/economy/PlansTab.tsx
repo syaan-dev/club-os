@@ -22,9 +22,7 @@ export function PlansTab({
     duesPlans,
     duesCycles,
     canManageDues,
-    generateDues,
     ensureAutoDuesCycles,
-    sendDuePaymentLinks,
   } = useDues();
   const { loading } = useUi();
 
@@ -38,6 +36,28 @@ export function PlansTab({
       </View>
     );
   }
+
+  const activePlans = duesPlans.filter((plan) => plan.isActive);
+  const archivedPlans = duesPlans.filter((plan) => !plan.isActive);
+
+  const renderPlanItem = (item: DuesPlan) => (
+    <Pressable
+      style={styles.memberRow}
+      onPress={() => onEditPlan(item)}
+      accessibilityRole="button"
+      accessibilityLabel={`Edit plan ${item.name}`}
+    >
+      <View style={styles.dueRowText}>
+        <Text style={styles.memberName}>{item.name}</Text>
+        <Text style={styles.memberMeta}>
+          {formatAmount(item.amount)} · {frequencyLabel(item.frequency)} ·{" "}
+          {item.graceDays}d grace
+          {item.autoGenerate ? ` · Auto from ${item.startDate ?? "—"}` : ""}
+        </Text>
+      </View>
+      <Text style={styles.headerChevron}>›</Text>
+    </Pressable>
+  );
 
   return (
     <>
@@ -63,34 +83,29 @@ export function PlansTab({
           <Text style={styles.memberMeta}>No dues plans yet.</Text>
         ) : (
           <FlatList
-            data={duesPlans}
+            data={activePlans}
             keyExtractor={(item) => item.id}
             scrollEnabled={false}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
-            renderItem={({ item }) => (
-              <Pressable
-                style={styles.memberRow}
-                onPress={() => onEditPlan(item)}
-                accessibilityRole="button"
-                accessibilityLabel={`Edit plan ${item.name}`}
-              >
-                <View style={styles.dueRowText}>
-                  <Text style={styles.memberName}>{item.name}</Text>
-                  <Text style={styles.memberMeta}>
-                    {formatAmount(item.amount)} ·{" "}
-                    {frequencyLabel(item.frequency)} · {item.graceDays}d grace
-                    {item.autoGenerate
-                      ? ` · Auto from ${item.startDate ?? "—"}`
-                      : ""}
-                  </Text>
-                </View>
-                <Text style={[styles.metaText, { fontSize: 18 }]}>
-                  {"\u270E"}
-                </Text>
-              </Pressable>
-            )}
+            ListEmptyComponent={
+              <Text style={styles.memberMeta}>No active plans.</Text>
+            }
+            renderItem={({ item }) => renderPlanItem(item)}
           />
         )}
+
+        {archivedPlans.length > 0 ? (
+          <>
+            <Text style={[styles.subTitle, { marginTop: 16 }]}>Archived</Text>
+            <FlatList
+              data={archivedPlans}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              ItemSeparatorComponent={() => <View style={styles.separator} />}
+              renderItem={({ item }) => renderPlanItem(item)}
+            />
+          </>
+        ) : null}
       </View>
 
       <View style={styles.card}>
@@ -98,7 +113,7 @@ export function PlansTab({
           <View style={{ flex: 1 }}>
             <Text style={styles.cardTitle}>Billing cycles</Text>
             <Text style={styles.memberMeta}>
-              Open a cycle, then generate dues to bill every active member.
+              Open a cycle to edit it, generate dues, or resend payment links.
             </Text>
           </View>
           <Pressable
@@ -127,47 +142,22 @@ export function PlansTab({
             scrollEnabled={false}
             ItemSeparatorComponent={() => <View style={styles.separator} />}
             renderItem={({ item }) => (
-              <View style={styles.memberRow}>
-                <Pressable
-                  style={styles.dueRowText}
-                  onPress={() => onEditCycle(item)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Edit cycle ${item.cycleLabel}`}
-                >
+              <Pressable
+                style={styles.memberRow}
+                onPress={() => onEditCycle(item)}
+                accessibilityRole="button"
+                accessibilityLabel={`Manage cycle ${item.cycleLabel}`}
+              >
+                <View style={styles.dueRowText}>
                   <Text style={styles.memberName}>
                     {item.planName} · {item.cycleLabel}
                   </Text>
                   <Text style={styles.memberMeta}>
                     {item.dueDate ? `Due ${item.dueDate}` : "No due date"}
                   </Text>
-                </Pressable>
-                <View style={{ alignItems: "flex-end", gap: 6 }}>
-                  <Pressable
-                    onPress={() => generateDues(item.id)}
-                    disabled={loading}
-                    style={[
-                      styles.inlineButton,
-                      loading && styles.buttonDisabled,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Generate dues for ${item.cycleLabel}`}
-                  >
-                    <Text style={styles.inlineButtonText}>Generate dues</Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => sendDuePaymentLinks({ cycleId: item.id })}
-                    disabled={loading}
-                    style={[
-                      styles.inlineButton,
-                      loading && styles.buttonDisabled,
-                    ]}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Resend payment links for ${item.cycleLabel}`}
-                  >
-                    <Text style={styles.inlineButtonText}>Resend links</Text>
-                  </Pressable>
                 </View>
-              </View>
+                <Text style={styles.headerChevron}>›</Text>
+              </Pressable>
             )}
           />
         )}

@@ -294,6 +294,74 @@ export function useActivityActions(deps: ActivityActionsDeps) {
     setInfoText("Poll created.");
   };
 
+  const updatePoll = async (
+    pollId: string,
+    input: {
+      question: string;
+      options: string[];
+      closesAt: string;
+    },
+  ) => {
+    setErrorText("");
+    setInfoText("");
+
+    if (!clubId) {
+      setErrorText("Open a club first.");
+      return;
+    }
+    if (!isLeadership(currentRole)) {
+      setErrorText("Only an owner, treasurer or secretary can edit polls.");
+      return;
+    }
+    const question = input.question.trim();
+    if (!question) {
+      setErrorText("Poll question is required.");
+      return;
+    }
+    const options = input.options.map((o) => o.trim()).filter(Boolean);
+    if (options.length < 2) {
+      setErrorText("Add at least two options.");
+      return;
+    }
+    if (options.length > 10) {
+      setErrorText("A poll can have at most 10 options.");
+      return;
+    }
+    if (input.closesAt && !/^\d{4}-\d{2}-\d{2}$/.test(input.closesAt)) {
+      setErrorText("Close date must be in YYYY-MM-DD format.");
+      return;
+    }
+
+    setLoading(true);
+    // Guard on status = 'open' so a closed poll can never be edited or
+    // reopened: the row simply won't match once it has closed.
+    const { data, error } = await supabase
+      .from("club_polls")
+      .update({
+        question,
+        options,
+        closes_at: input.closesAt ? input.closesAt : null,
+      })
+      .eq("id", pollId)
+      .eq("club_id", clubId)
+      .eq("status", "open")
+      .select("id");
+    setLoading(false);
+
+    if (error) {
+      setErrorText(error.message);
+      return;
+    }
+    if (!data || data.length === 0) {
+      setErrorText("This poll has closed and can no longer be edited.");
+      await loadPolls(clubId);
+      return;
+    }
+
+    await loadPolls(clubId);
+    setInfoText("Poll updated.");
+  };
+
   const castVote = async (pollId: string, optionIndex: number) => {
     setErrorText("");
     setInfoText("");
@@ -446,6 +514,7 @@ export function useActivityActions(deps: ActivityActionsDeps) {
     updateMeeting,
     setMeetingRsvp,
     createPoll,
+    updatePoll,
     castVote,
     closePoll,
     createAnnouncement,
