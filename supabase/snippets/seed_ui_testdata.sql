@@ -1,28 +1,76 @@
 -- UI test-data seed for the local Supabase DB.
--- Populates ONE club (default: "Trojans") with members, dues plans/cycles,
--- member dues (mixed statuses), ledger transactions, meetings (+RSVPs),
--- polls (+votes) and announcements (+read receipts).
+-- Fully self-contained: creates its own auth user, club ("Trojans") and owner,
+-- then populates members, dues plans/cycles, member dues (mixed statuses),
+-- ledger transactions, meetings (+RSVPs), polls (+votes) and announcements
+-- (+read receipts). No pre-existing club or club_id is required.
 --
 -- Safe to re-run: every seeded row uses a fixed `5eed....` UUID (or is a child
 -- that cascades), so a second run replaces the data instead of duplicating it.
--- Only touches seeded rows (members with @seed.test emails + the fixed UUIDs);
--- real auth-linked members and other clubs are left untouched.
+-- The bootstrap auth user + club are upserted (kept) across runs; only the
+-- seeded child rows churn. Other clubs / real auth-linked members are untouched.
 --
 -- Run:
 --   docker exec -i supabase_db_club-os psql -U postgres -d postgres \
 --     -v ON_ERROR_STOP=1 -f - < supabase/snippets/seed_ui_testdata.sql
 
-\set club_id '''72f8b2fe-0d6a-4eb9-ba6a-7d412d68c4bf'''
+-- Fixed identifiers so the seed is fully self-contained and re-runnable.
+-- club_id is stored pre-quoted (used bare as :club_id); the *_uid / owner_id
+-- vars are stored raw (used as :'auth_uid' etc., which add the quotes).
+-- auth_uid + member_uid are real phone-login users: signing in via OTP with
+-- +919876543210 lands as the club owner, +919876543211 as a member.
+\set auth_uid   '5eed7777-0000-4000-8000-000000000000'
+\set member_uid '5eed7778-0000-4000-8000-000000000000'
+\set club_id    '''5eed9999-0000-4000-8000-000000000000'''
+\set owner_id   '5eed0000-0000-4000-8000-000000000000'
 
 begin;
 
--- Resolve the club owner (created_by / recorded_by for seeded activity rows).
-select id as owner_id
-from public.members
-where club_id = :club_id and role = 'owner'
-order by created_at
-limit 1
-\gset
+-- Bootstrap two phone-login auth users + the club so nothing pre-exists.
+-- auth.users is required because clubs.created_by references it, and the
+-- members rows link to these ids so the test phones can sign in. auth.users.phone
+-- is stored WITHOUT the leading '+' (GoTrue convention). Upserted (kept) across
+-- runs; only the seeded child rows churn.
+--
+-- The token columns (confirmation_token, recovery_token, email_change*) MUST be
+-- '' not NULL: GoTrue scans them into non-nullable Go strings. created_at /
+-- updated_at MUST be set (no DB default) — GoTrue scans created_at into a
+-- *time.Time and a NULL throws "Database error finding user".
+insert into auth.users (
+  id, instance_id, aud, role, phone, phone_confirmed_at, email,
+  created_at, updated_at,
+  confirmation_token, recovery_token, email_change, email_change_token_new
+)
+values
+  (:'auth_uid',   '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '919876543210', now(), 'owner@seed.test',  now(), now(), '', '', '', ''),
+  (:'member_uid', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '919876543211', now(), 'member@seed.test', now(), now(), '', '', '', '')
+on conflict (id) do update
+  set phone = excluded.phone,
+      phone_confirmed_at = excluded.phone_confirmed_at,
+      email = excluded.email,
+      created_at = coalesce(auth.users.created_at, excluded.created_at),
+      updated_at = excluded.updated_at,
+      confirmation_token = '',
+      recovery_token = '',
+      email_change = '',
+      email_change_token_new = '';
+
+-- Phone-provider identity rows (a real signup creates one). provider_id = the
+-- user id; identity_data carries sub + phone. created_at/updated_at MUST be set
+-- (no default) — GoTrue scans them into *time.Time and a NULL breaks login.
+insert into auth.identities (provider_id, user_id, provider, identity_data, last_sign_in_at, created_at, updated_at)
+values
+  (:'auth_uid',   :'auth_uid',   'phone', jsonb_build_object('sub', :'auth_uid',   'phone', '919876543210'), now(), now(), now()),
+  (:'member_uid', :'member_uid', 'phone', jsonb_build_object('sub', :'member_uid', 'phone', '919876543211'), now(), now(), now())
+on conflict (provider_id, provider) do update
+  set identity_data = excluded.identity_data,
+      created_at = coalesce(auth.identities.created_at, excluded.created_at),
+      updated_at = excluded.updated_at;
+
+insert into public.clubs (id, name, description, currency, created_by)
+values (
+  :club_id, 'Trojans', 'Seeded demo club for UI testing.', 'INR', :'auth_uid'
+)
+on conflict (id) do nothing;
 
 -- ---------------------------------------------------------------------------
 -- Clean previous seed (children cascade from these deletes / member delete).
@@ -63,9 +111,10 @@ where club_id = :club_id and email like '%@seed.test';
 -- Members (no user_id: directory display only; mixed roles + statuses).
 -- ---------------------------------------------------------------------------
 insert into public.members (id, club_id, user_id, name, email, phone, role, membership_status, is_active) values
-  ('5eed0000-0000-4000-8000-000000000001', :club_id, null, 'Priya Sharma',   'priya@seed.test',   '+919800000001', 'treasurer', 'active',  true),
+  (:'owner_id',                            :club_id, :'auth_uid',   'Maya Kapoor', 'owner@seed.test',  '+919876543210', 'owner',     'active',  true),
+  ('5eed0000-0000-4000-8000-000000000001', :club_id, null,          'Priya Sharma','priya@seed.test',  '+919800000001', 'treasurer', 'active',  true),
   ('5eed0000-0000-4000-8000-000000000002', :club_id, null, 'Arjun Menon',    'arjun@seed.test',   '+919800000002', 'secretary', 'active',  true),
-  ('5eed0000-0000-4000-8000-000000000003', :club_id, null, 'Kavya Reddy',    'kavya@seed.test',   '+919800000003', 'member',    'active',  true),
+  ('5eed0000-0000-4000-8000-000000000003', :club_id, :'member_uid', 'Kavya Reddy',    'kavya@seed.test',   '+919876543211', 'member',    'active',  true),
   ('5eed0000-0000-4000-8000-000000000004', :club_id, null, 'Rohan Gupta',    'rohan@seed.test',   '+919800000004', 'member',    'active',  true),
   ('5eed0000-0000-4000-8000-000000000005', :club_id, null, 'Ananya Iyer',    'ananya@seed.test',  '+919800000005', 'member',    'active',  true),
   ('5eed0000-0000-4000-8000-000000000006', :club_id, null, 'Vikram Singh',   'vikram@seed.test',  '+919800000006', 'member',    'active',  true),
