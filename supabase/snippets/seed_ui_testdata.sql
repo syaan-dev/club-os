@@ -104,6 +104,14 @@ where id in (
   '5eed0001-0000-4000-8000-000000000001','5eed0001-0000-4000-8000-000000000002',
   '5eed0001-0000-4000-8000-000000000003'
 );
+delete from public.ledger_entries
+where id in (
+  '5eed0006-0000-4000-8000-000000000001','5eed0006-0000-4000-8000-000000000002',
+  '5eed0006-0000-4000-8000-000000000003','5eed0006-0000-4000-8000-000000000004',
+  '5eed0006-0000-4000-8000-000000000005','5eed0006-0000-4000-8000-000000000006',
+  '5eed0006-0000-4000-8000-000000000007','5eed0006-0000-4000-8000-000000000008',
+  '5eed0006-0000-4000-8000-000000000009','5eed0006-0000-4000-8000-00000000000a'
+);
 delete from public.members
 where club_id = :club_id and email like '%@seed.test';
 
@@ -170,19 +178,20 @@ insert into public.member_dues (club_id, member_id, dues_cycle_id, amount_due, a
   (:club_id, '5eed0000-0000-4000-8000-000000000006', '5eed0002-0000-4000-8000-000000000004', 300.00,   0.00, 'overdue', null);
 
 -- ---------------------------------------------------------------------------
--- Ledger transactions (income + expense).
 -- ---------------------------------------------------------------------------
-insert into public.transactions (id, club_id, member_id, recorded_by, type, amount, category, payment_method, status, description, source) values
-  ('5eed0006-0000-4000-8000-000000000001', :club_id, '5eed0000-0000-4000-8000-000000000003', :'owner_id', 'income',  100.00, 'Dues',        'UPI',  'completed', 'June membership - Kavya', 'manual'),
-  ('5eed0006-0000-4000-8000-000000000002', :club_id, :'owner_id',                            :'owner_id', 'income',  100.00, 'Dues',        'UPI',  'completed', 'June membership - owner', 'manual'),
-  ('5eed0006-0000-4000-8000-000000000003', :club_id, '5eed0000-0000-4000-8000-000000000004', :'owner_id', 'income',  500.00, 'Dues',        'stripe','completed', 'Tournament fee - Rohan',  'gateway'),
-  ('5eed0006-0000-4000-8000-000000000004', :club_id, null,                                   :'owner_id', 'income', 5000.00, 'Sponsorship', 'Bank', 'completed', 'Season sponsor - AceSports', 'manual'),
-  ('5eed0006-0000-4000-8000-000000000005', :club_id, null,                                   :'owner_id', 'income', 1500.00, 'Donation',    'UPI',  'completed', 'Anonymous donation',      'manual'),
-  ('5eed0006-0000-4000-8000-000000000006', :club_id, null,                                   :'owner_id', 'expense',2000.00, 'Ground',      'UPI',  'completed', 'Ground booking - June',   'manual'),
-  ('5eed0006-0000-4000-8000-000000000007', :club_id, null,                                   :'owner_id', 'expense',3500.00, 'Equipment',   'Bank', 'completed', 'New practice kit',        'manual'),
-  ('5eed0006-0000-4000-8000-000000000008', :club_id, null,                                   :'owner_id', 'expense', 800.00, 'Refreshments','Cash', 'completed', 'Match-day refreshments',  'manual'),
-  ('5eed0006-0000-4000-8000-000000000009', :club_id, null,                                   :'owner_id', 'expense',1200.00, 'Awards',      'UPI',  'completed', 'Winner trophies',         'manual'),
-  ('5eed0006-0000-4000-8000-00000000000a', :club_id, null,                                   :'owner_id', 'expense', 450.00, 'Misc',        'Cash', 'completed', 'Stationery & printing',   'manual');
+-- Ledger entries (income + expense).
+-- ---------------------------------------------------------------------------
+insert into public.ledger_entries (id, club_id, member_id, recorded_by, type, amount, category, method, status, source, occurred_at) values
+  ('5eed0006-0000-4000-8000-000000000001', :club_id, '5eed0000-0000-4000-8000-000000000003', :'owner_id', 'income',  100.00, 'Dues',        'UPI',  'completed', 'manual',   now() - interval '2 days'),
+  ('5eed0006-0000-4000-8000-000000000002', :club_id, :'owner_id',                            :'owner_id', 'income',  100.00, 'Dues',        'UPI',  'completed', 'manual',   now() - interval '2 days'),
+  ('5eed0006-0000-4000-8000-000000000003', :club_id, '5eed0000-0000-4000-8000-000000000004', :'owner_id', 'income',  500.00, 'Dues',        'stripe','completed', 'gateway',  now() - interval '1 day'),
+  ('5eed0006-0000-4000-8000-000000000004', :club_id, null,                                   :'owner_id', 'income', 5000.00, 'Sponsorship', 'Bank', 'completed', 'manual',   now() - interval '5 days'),
+  ('5eed0006-0000-4000-8000-000000000005', :club_id, null,                                   :'owner_id', 'income', 1500.00, 'Donation',    'UPI',  'completed', 'manual',   now() - interval '3 days'),
+  ('5eed0006-0000-4000-8000-000000000006', :club_id, null,                                   :'owner_id', 'expense',2000.00, 'Ground',      'UPI',  'completed', 'manual',   now() - interval '7 days'),
+  ('5eed0006-0000-4000-8000-000000000007', :club_id, null,                                   :'owner_id', 'expense',3500.00, 'Equipment',   'Bank', 'completed', 'manual',   now() - interval '10 days'),
+  ('5eed0006-0000-4000-8000-000000000008', :club_id, null,                                   :'owner_id', 'expense', 800.00, 'Refreshments','Cash', 'completed', 'manual',   now() - interval '4 days'),
+  ('5eed0006-0000-4000-8000-000000000009', :club_id, null,                                   :'owner_id', 'expense',1200.00, 'Awards',      'UPI',  'completed', 'manual',   now() - interval '6 days'),
+  ('5eed0006-0000-4000-8000-00000000000a', :club_id, null,                                   :'owner_id', 'expense', 450.00, 'Misc',        'Cash', 'completed', 'manual',   now() - interval '8 days');
 
 -- ---------------------------------------------------------------------------
 -- Meetings (upcoming scheduled + past completed/cancelled).
@@ -265,7 +274,7 @@ select 'members'       as entity, count(*) from public.members        where club
 union all select 'dues_plans',    count(*) from public.dues_plans      where club_id = :club_id
 union all select 'dues_cycles',   count(*) from public.dues_cycles     where club_id = :club_id
 union all select 'member_dues',   count(*) from public.member_dues     where club_id = :club_id
-union all select 'transactions',  count(*) from public.transactions    where club_id = :club_id
+union all select 'ledger_entries', count(*) from public.ledger_entries   where club_id = :club_id
 union all select 'meetings',      count(*) from public.club_meetings   where club_id = :club_id
 union all select 'meeting_rsvps', count(*) from public.meeting_rsvps   where club_id = :club_id
 union all select 'polls',         count(*) from public.club_polls      where club_id = :club_id
