@@ -154,6 +154,7 @@ export function useDues() {
     duesPlans: c.duesPlans,
     duesCycles: c.duesCycles,
     ledgerEntries: c.ledgerEntries,
+    ledgerSummary: c.ledgerSummary,
     canManageDues: c.canManageDues,
     paidCount: c.paidCount,
     unpaidCount: c.unpaidCount,
@@ -169,6 +170,7 @@ export function useDues() {
     recordTransaction: c.recordTransaction,
     startDuePayment: c.startDuePayment,
     sendDuePaymentLinks: c.sendDuePaymentLinks,
+    markDuePaid: c.markDuePaid,
   };
 }
 

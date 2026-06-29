@@ -108,10 +108,17 @@ export type LedgerEntry = {
   type: TransactionType;
   amount: number;
   category: string;
-  paymentMethod: string;
-  description: string | null;
+  method: string;
+  source: "manual" | "gateway" | "adjustment";
   memberName: string | null;
   createdAt: string;
+};
+
+export type LedgerSummary = {
+  income: number;
+  expense: number;
+  net: number;
+  entryCount: number;
 };
 
 export type MeetingStatus = "scheduled" | "completed" | "cancelled";

@@ -1,5 +1,6 @@
-// dues-dashboard: returns an aggregated dues + ledger summary for a club. Read
-// only; any active club member may view it (RLS enforces club scoping).
+// dues-dashboard: returns dues summary for a club. Read only; any active club
+// member may view it (RLS enforces club scoping). Ledger summary is retrieved
+// separately via club_ledger_summary() RPC by the app.
 import {
   errorResponse,
   getAuthedUser,
@@ -17,8 +18,6 @@ type DueRow = {
   status: "pending" | "paid" | "overdue" | "waived";
 };
 
-type TxRow = { type: "income" | "expense"; amount: number };
-
 Deno.serve(
   handlePost(async (body, req) => {
     const client = getClientForRequest(req);
@@ -31,34 +30,19 @@ Deno.serve(
       return errorResponse("You are not an active member of this club", 403);
     }
 
-    const [duesResult, txResult] = await Promise.all([
-      client
-        .from("member_dues")
-        .select("member_id,amount_due,amount_paid,status")
-        .eq("club_id", clubId),
-      client
-        .from("transactions")
-        .select("type,amount")
-        .eq("club_id", clubId)
-        .eq("status", "completed"),
-    ]);
+    const duesResult = await client
+      .from("member_dues")
+      .select("member_id,amount_due,amount_paid,status")
+      .eq("club_id", clubId);
 
     if (duesResult.error) {
       return errorResponse(duesResult.error.message, 400);
     }
 
     const dues = (duesResult.data ?? []) as DueRow[];
-    const txs = (txResult.data ?? []) as TxRow[];
 
     const totalBilled = dues.reduce((s, d) => s + Number(d.amount_due), 0);
     const totalCollected = dues.reduce((s, d) => s + Number(d.amount_paid), 0);
-
-    const income = txs
-      .filter((t) => t.type === "income")
-      .reduce((s, t) => s + Number(t.amount), 0);
-    const expense = txs
-      .filter((t) => t.type === "expense")
-      .reduce((s, t) => s + Number(t.amount), 0);
 
     return jsonResponse({
       dues: {
@@ -73,11 +57,6 @@ Deno.serve(
           totalBilled === 0
             ? 0
             : Math.round((totalCollected / totalBilled) * 100),
-      },
-      ledger: {
-        income,
-        expense,
-        net: income - expense,
       },
     });
   }),

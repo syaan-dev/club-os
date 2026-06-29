@@ -7,6 +7,7 @@ import type {
   DuesFrequency,
   DuesPlan,
   LedgerEntry,
+  LedgerSummary,
   MemberDue,
   TransactionType,
 } from "../types";
@@ -96,11 +97,12 @@ export async function fetchDuesCycles(clubId: string): Promise<DuesCycle[]> {
 
 export async function fetchLedger(clubId: string): Promise<LedgerEntry[]> {
   const { data, error } = await supabase
-    .from("transactions")
+    .from("ledger_entries")
     .select(
-      "id,type,amount,category,payment_method,description,created_at,member:members!transactions_member_id_fkey(name)",
+      "id,type,amount,category,method,source,created_at,member:members!ledger_entries_member_id_fkey(name)",
     )
     .eq("club_id", clubId)
+    .eq("status", "completed")
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -115,10 +117,34 @@ export async function fetchLedger(clubId: string): Promise<LedgerEntry[]> {
       type: row.type as TransactionType,
       amount: Number(row.amount ?? 0),
       category: row.category ?? "",
-      paymentMethod: row.payment_method ?? "",
-      description: row.description ?? null,
+      method: row.method ?? "UPI",
+      source: row.source ?? "manual",
       memberName: member?.name ?? null,
       createdAt: row.created_at ?? "",
     };
   });
+}
+
+export async function fetchLedgerSummary(
+  clubId: string,
+): Promise<LedgerSummary | null> {
+  const { data, error } = await supabase.rpc("club_ledger_summary", {
+    _club_id: clubId,
+  });
+
+  if (error || !data) {
+    return null;
+  }
+
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) {
+    return null;
+  }
+
+  return {
+    income: Number(row.income ?? 0),
+    expense: Number(row.expense ?? 0),
+    net: Number(row.net ?? 0),
+    entryCount: Number(row.entry_count ?? 0),
+  };
 }

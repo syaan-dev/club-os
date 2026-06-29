@@ -1,5 +1,13 @@
 import { useMemo } from "react";
-import { ActivityIndicator, Pressable, Text, View } from "react-native";
+import { useState } from "react";
+import {
+  ActivityIndicator,
+ 
+  Modal,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { styles, colors } from "../../styles";
 import { useDues, useMembers, useUi } from "../../context/domainHooks";
 import type { MemberDue } from "../../types";
@@ -52,11 +60,13 @@ function groupDuesByCycle(dues: MemberDue[]): DueSection[] {
 // "Dues" tab: collection metrics plus the per-cycle dues list, with an inline
 // "Pay now" action on the current member's own pending/overdue rows.
 export function DuesTab() {
-  const { memberDues, duesSummary, duesLoading, startDuePayment } = useDues();
-  const { members, currentMemberId } = useMembers();
+  const { memberDues, duesSummary, duesLoading, startDuePayment, markDuePaid } =
+    useDues();
+  const { members, currentMemberId, currentRole } = useMembers();
   const { loading } = useUi();
 
   const sections = useMemo(() => groupDuesByCycle(memberDues), [memberDues]);
+  const [markingDueId, setMarkingDueId] = useState<string | null>(null);
 
   const metrics: { label: string; value: string | number }[] = [
     { label: "Total members", value: members.length },
@@ -66,6 +76,17 @@ export function DuesTab() {
     { label: "Collection health", value: `${duesSummary.collectionPercent}%` },
     { label: "Overdue dues", value: duesSummary.overdueCount },
   ];
+
+  const canMarkPaid = currentRole === "Owner" || currentRole === "Treasurer";
+  const selectedDue = memberDues.find((due) => due.id === markingDueId) ?? null;
+
+  const onPickMethod = async (method: "Cash" | "UPI" | "Bank") => {
+    if (!selectedDue) {
+      return;
+    }
+    await markDuePaid(selectedDue, method);
+    setMarkingDueId(null);
+  };
 
   return (
     <>
@@ -137,11 +158,65 @@ export function DuesTab() {
                       <Text style={styles.inlineButtonText}>Pay now</Text>
                     </Pressable>
                   ) : null}
-                </View>
+                  {canMarkPaid &&
+                (item.status === "pending" || item.status === "overdue") ? (
+                  <Pressable
+                    onPress={() => setMarkingDueId(item.id)}
+                    disabled={loading}
+                    style={[
+                      styles.inlineButton,
+                      loading && styles.buttonDisabled,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Mark dues paid for ${item.memberName}`}
+                  >
+                    <Text style={styles.inlineButtonText}>Mark paid</Text>
+                  </Pressable>
+                ) : null}
+              </View>
               </View>
             </View>
           ))}
-        </View>
+    
+      <Modal
+        visible={Boolean(selectedDue)}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMarkingDueId(null)}
+      >
+        <Pressable
+          style={styles.sheetBackdrop}
+          onPress={() => setMarkingDueId(null)}
+        >
+          <Pressable style={styles.sheet} onPress={() => {}}>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle}>Mark as paid</Text>
+            {selectedDue ? (
+              <Text style={styles.memberMeta}>
+                {selectedDue.memberName} · {selectedDue.cycleLabel} · Remaining{" "}
+                {formatAmount(
+                  Math.max(selectedDue.amountDue - selectedDue.amountPaid, 0),
+                )}
+              </Text>
+            ) : null}
+            <View style={{ gap: 10 }}>
+              {(["Cash", "UPI", "Bank"] as const).map((method) => (
+                <Pressable
+                  key={method}
+                  onPress={() => void onPickMethod(method)}
+                  disabled={loading}
+                  style={[styles.switchRow, loading && styles.buttonDisabled]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Mark paid via ${method}`}
+                >
+                  <Text style={styles.memberName}>{method}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+    </View>
       ))}
     </>
   );
