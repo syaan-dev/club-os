@@ -12,6 +12,7 @@ import { styles } from "../../src/styles";
 import { useClubs, useMembers, useProfile, useAuth, useUi } from "../../src/context/domainHooks";
 import { AppButton } from "../../src/components/AppButton";
 import { TabScreenShell } from "../../src/components/TabScreenShell";
+import { openPrivacy, openTerms } from "../../src/legal/policies";
 
 function SetupRow({
   label,
@@ -123,6 +124,17 @@ export default function SetupScreen() {
     );
   };
 
+  const showDataRights = () => {
+    Alert.alert(
+      "Your data & rights",
+      "Under India's Digital Personal Data Protection Act, you can request access to, " +
+        "correction of, or deletion of your personal data, and withdraw your consent.\n\n" +
+        "To make a request or raise a grievance, contact our Grievance Officer:\n" +
+        "[Grievance Officer name]\n[grievance@email]",
+      [{ text: "OK" }],
+    );
+  };
+
   return (
     <TabScreenShell>
       <View style={styles.card}>
@@ -157,6 +169,25 @@ export default function SetupScreen() {
           label={loading ? "Logging out..." : "Log out"}
           onPress={logout}
           disabled={loading}
+        />
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Legal</Text>
+        <SetupRow
+          label="Terms of Service"
+          meta="Read our terms"
+          onPress={openTerms}
+        />
+        <SetupRow
+          label="Privacy Policy"
+          meta="How we handle your data"
+          onPress={openPrivacy}
+        />
+        <SetupRow
+          label="Your data & rights"
+          meta="Access, delete or raise a grievance"
+          onPress={showDataRights}
         />
       </View>
 

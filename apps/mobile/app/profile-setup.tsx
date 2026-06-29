@@ -4,6 +4,7 @@ import { styles, colors } from "../src/styles";
 import { useProfile, useUi } from "../src/context/domainHooks";
 import { AppButton } from "../src/components/AppButton";
 import { OnboardingShell } from "../src/components/OnboardingShell";
+import { openPrivacy, openTerms } from "../src/legal/policies";
 
 export default function ProfileSetupScreen() {
   const {
@@ -88,14 +89,21 @@ export default function ProfileSetupScreen() {
           onPress={() => setAgreed((prev) => !prev)}
           accessibilityRole="checkbox"
           accessibilityState={{ checked: agreed }}
-          accessibilityLabel="Agree to terms and privacy policy"
+          accessibilityLabel="Confirm you are 18 or older and agree to the terms and privacy policy"
         >
           <View style={[styles.consentBox, agreed && styles.consentBoxChecked]}>
             {agreed ? <Text style={styles.consentTick}>✓</Text> : null}
           </View>
           <Text style={styles.consentText}>
-            I agree to the <Text style={styles.consentLink}>Terms</Text> and{" "}
-            <Text style={styles.consentLink}>Privacy Policy</Text>.
+            I confirm I am 18 or older and agree to the{" "}
+            <Text style={styles.consentLink} onPress={openTerms}>
+              Terms
+            </Text>{" "}
+            and{" "}
+            <Text style={styles.consentLink} onPress={openPrivacy}>
+              Privacy Policy
+            </Text>
+            .
           </Text>
         </Pressable>
         <AppButton

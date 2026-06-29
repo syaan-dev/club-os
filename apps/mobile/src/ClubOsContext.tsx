@@ -31,6 +31,7 @@ import { canManageFinances, deriveDuesSummary } from "./dues";
 import { buildInviteLink, isLeadership, isValidEmail, mapRole, normalizePhone } from "./lib/format";
 import { fetchMembershipRequests, fetchMyClubs } from "./data/clubs";
 import { fetchMembers } from "./data/members";
+import { recordPolicyConsent } from "./data/policies";
 import {
   fetchDuesCycles,
   fetchDuesPlans,
@@ -995,6 +996,16 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    if (session?.user?.id) {
+      const consentError = await recordPolicyConsent(
+        session.user.id,
+        "onboarding",
+      );
+      if (consentError) {
+        console.warn("Failed to record policy consent:", consentError.message);
+      }
+    }
+
     setInfoText(
       needsEmailVerify
         ? `Profile saved. We sent a verification link to ${trimmedEmail}.`
@@ -1074,6 +1085,11 @@ export function ClubOsProvider({ children }: { children: ReactNode }) {
       },
       { emailRedirectTo: emailRedirectUrl() },
     );
+
+    const consentError = await recordPolicyConsent(user.id, "onboarding");
+    if (consentError) {
+      console.warn("Failed to record policy consent:", consentError.message);
+    }
 
     setClubId(pendingClubId);
     await Promise.all([loadMembers(pendingClubId), loadInvites(pendingClubId)]);

@@ -14,6 +14,7 @@ import { styles, colors } from "../src/styles";
 import { useAuth } from "../src/context/domainHooks";
 import { AppButton } from "../src/components/AppButton";
 import { Logo } from "../src/components/Logo";
+import { openPrivacy, openTerms } from "../src/legal/policies";
 
 export default function OtpScreen() {
   const {
@@ -110,7 +111,15 @@ export default function OtpScreen() {
           </View>
 
           <Text style={styles.authFooter}>
-            By continuing you agree to our Terms and Privacy Policy.
+            By continuing you agree to our{" "}
+            <Text style={styles.consentLink} onPress={openTerms}>
+              Terms
+            </Text>{" "}
+            and{" "}
+            <Text style={styles.consentLink} onPress={openPrivacy}>
+              Privacy Policy
+            </Text>
+            .
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
